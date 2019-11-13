@@ -41,7 +41,7 @@ type Callbacks interface {
 	DoLookup(inHeader *InHeader, lookupIn *LookupIn) (lookupOut *LookupOut, errno syscall.Errno)
 	DoForget(inHeader *InHeader, forgetIn *ForgetIn)
 	DoGetAttr(inHeader *InHeader, getAttrIn *GetAttrIn) (getAttrOut *GetAttrOut, errno syscall.Errno)
-	DoSetAttr(inHeader *InHeader, setAttrIn *SetAttrIn) (errno syscall.Errno)
+	DoSetAttr(inHeader *InHeader, setAttrIn *SetAttrIn) (setAttrOut *SetAttrOut, errno syscall.Errno)
 	DoReadLink(inHeader *InHeader) (readLinkOut *ReadLinkOut, errno syscall.Errno)
 	DoSymLink(inHeader *InHeader, symLinkIn *SymLinkIn) (errno syscall.Errno)
 	DoMkNod(inHeader *InHeader, mkNodIn *MkNodIn) (errno syscall.Errno)

@@ -39,7 +39,7 @@ type Callbacks interface {
 	DoLookup(inHeader *InHeader, lookupIn *LookupIn) (lookupOut *LookupOut, errno syscall.Errno)
 	DoForget(inHeader *InHeader, forgetIn *ForgetIn)
 	DoGetAttr(inHeader *InHeader, getAttrIn *GetAttrIn) (getAttrOut *GetAttrOut, errno syscall.Errno)
-	DoSetAttr(inHeader *InHeader, setAttrIn *SetAttrIn) (errno syscall.Errno)
+	DoSetAttr(inHeader *InHeader, setAttrIn *SetAttrIn) (setAttrOut *SetAttrOut, errno syscall.Errno)
 	DoReadLink(inHeader *InHeader) (readLinkOut *ReadLinkOut, errno syscall.Errno)
 	DoSymLink(inHeader *InHeader, symLinkIn *SymLinkIn) (errno syscall.Errno)
 	DoMkNod(inHeader *InHeader, mkNodIn *MkNodIn) (errno syscall.Errno)
@@ -272,7 +272,7 @@ const DirEntFixedPortionSize = 24 // + len(Name) and rounded up to DirEntAlignme
 
 type DirEnt struct {
 	Ino     uint64
-	Off     uint64
+	Off     uint64 // position of next DirEnt
 	NameLen uint32 // automatically computed ( == len(Name) )
 	Type    uint32
 	Name    []byte
@@ -412,6 +412,15 @@ type SetAttrIn struct {
 	UID       uint32
 	GID       uint32
 	Unused5   uint32
+}
+
+const SetAttrOutSize = 16 + AttrSize
+
+type SetAttrOut struct {
+	AttrValidSec  uint64
+	AttrValidNSec uint32
+	Dummy         uint32
+	Attr
 }
 
 type ReadLinkOut struct {
@@ -703,12 +712,13 @@ type CreateIn struct {
 	Name    []byte
 }
 
-const CreateOutSize = 16
+const CreateOutSize = 16 + EntryOutSize
 
 type CreateOut struct {
 	FH        uint64
 	OpenFlags uint32
 	Padding   uint32
+	EntryOut
 }
 
 const InterruptInSize = 8
