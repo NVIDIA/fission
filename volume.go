@@ -346,3 +346,14 @@ func (volume *volumeStruct) devFuseFDWriter(inHeader *InHeader, errno syscall.Er
 		volume.logger.Printf("Write to /dev/fuse returned bad errno: %v", errno)
 	}
 }
+
+func cloneByteSlice(inBuf []byte, andTrimTrailingNullByte bool) (outBuf []byte) {
+	outBuf = make([]byte, len(inBuf))
+	if 0 != len(inBuf) {
+		_ = copy(outBuf, inBuf)
+		if andTrimTrailingNullByte && (0 == outBuf[len(outBuf)-1]) {
+			outBuf = outBuf[:len(outBuf)-1]
+		}
+	}
+	return
+}

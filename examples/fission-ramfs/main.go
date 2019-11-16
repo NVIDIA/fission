@@ -294,13 +294,10 @@ func unixTimeNow() (unixTimeNowSec uint64, unixTimeNowNSec uint32) {
 	return
 }
 
-func cloneByteSlice(inBuf []byte, andTrimTrailingNullByte bool) (outBuf []byte) {
+func cloneByteSlice(inBuf []byte) (outBuf []byte) {
 	outBuf = make([]byte, len(inBuf))
 	if 0 != len(inBuf) {
 		_ = copy(outBuf, inBuf)
-		if andTrimTrailingNullByte && (0 == outBuf[len(outBuf)-1]) {
-			outBuf = outBuf[:len(outBuf)-1]
-		}
 	}
 	return
 }

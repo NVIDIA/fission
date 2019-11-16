@@ -15,7 +15,7 @@ func (volume *volumeStruct) doLookup(inHeader *InHeader, devFuseFDReadBufPayload
 	)
 
 	lookupIn = &LookupIn{
-		Name: devFuseFDReadBufPayload[:(len(devFuseFDReadBufPayload) - 1)],
+		Name: cloneByteSlice(devFuseFDReadBufPayload, true),
 	}
 
 	lookupOut, errno = volume.callbacks.DoLookup(inHeader, lookupIn)
@@ -218,7 +218,7 @@ func (volume *volumeStruct) doSymLink(inHeader *InHeader, devFuseFDReadBufPayloa
 		symLinkIn     *SymLinkIn
 	)
 
-	nameDataSplit = bytes.SplitN(devFuseFDReadBufPayload, []byte{0}, 1)
+	nameDataSplit = bytes.SplitN(devFuseFDReadBufPayload, []byte{0}, 2)
 	if len(nameDataSplit) != 2 {
 		volume.logger.Printf("Call to doSymLink() with bad devFuseFDReadBufPayload")
 		volume.devFuseFDWriter(inHeader, syscall.EINVAL)
@@ -226,8 +226,8 @@ func (volume *volumeStruct) doSymLink(inHeader *InHeader, devFuseFDReadBufPayloa
 	}
 
 	symLinkIn = &SymLinkIn{
-		Name: nameDataSplit[0],
-		Data: nameDataSplit[1],
+		Name: cloneByteSlice(nameDataSplit[0], false),
+		Data: cloneByteSlice(nameDataSplit[1], true),
 	}
 
 	errno = volume.callbacks.DoSymLink(inHeader, symLinkIn)
@@ -242,7 +242,7 @@ func (volume *volumeStruct) doMkNod(inHeader *InHeader, devFuseFDReadBufPayload 
 	)
 
 	mkNodIn = &MkNodIn{
-		Name: devFuseFDReadBufPayload[:(len(devFuseFDReadBufPayload) - 1)],
+		Name: cloneByteSlice(devFuseFDReadBufPayload, true),
 	}
 
 	errno = volume.callbacks.DoMkNod(inHeader, mkNodIn)
@@ -257,7 +257,7 @@ func (volume *volumeStruct) doMkDir(inHeader *InHeader, devFuseFDReadBufPayload 
 	)
 
 	mkDirIn = &MkDirIn{
-		Name: devFuseFDReadBufPayload[:(len(devFuseFDReadBufPayload) - 1)],
+		Name: cloneByteSlice(devFuseFDReadBufPayload, true),
 	}
 
 	errno = volume.callbacks.DoMkDir(inHeader, mkDirIn)
@@ -272,7 +272,7 @@ func (volume *volumeStruct) doUnlink(inHeader *InHeader, devFuseFDReadBufPayload
 	)
 
 	unlinkIn = &UnlinkIn{
-		Name: devFuseFDReadBufPayload[:(len(devFuseFDReadBufPayload) - 1)],
+		Name: cloneByteSlice(devFuseFDReadBufPayload, true),
 	}
 
 	errno = volume.callbacks.DoUnlink(inHeader, unlinkIn)
@@ -287,7 +287,7 @@ func (volume *volumeStruct) doRmDir(inHeader *InHeader, devFuseFDReadBufPayload 
 	)
 
 	rmDirIn = &RmDirIn{
-		Name: devFuseFDReadBufPayload[:(len(devFuseFDReadBufPayload) - 1)],
+		Name: cloneByteSlice(devFuseFDReadBufPayload, true),
 	}
 
 	errno = volume.callbacks.DoRmDir(inHeader, rmDirIn)
@@ -308,7 +308,7 @@ func (volume *volumeStruct) doRename(inHeader *InHeader, devFuseFDReadBufPayload
 		return
 	}
 
-	oldNameNewNameSplit = bytes.SplitN(devFuseFDReadBufPayload[RenameInFixedPortionSize:], []byte{0}, 1)
+	oldNameNewNameSplit = bytes.SplitN(devFuseFDReadBufPayload[RenameInFixedPortionSize:], []byte{0}, 2)
 	if len(oldNameNewNameSplit) != 2 {
 		volume.logger.Printf("Call to doRename() with bad devFuseFDReadBufPayload")
 		volume.devFuseFDWriter(inHeader, syscall.EINVAL)
@@ -317,8 +317,8 @@ func (volume *volumeStruct) doRename(inHeader *InHeader, devFuseFDReadBufPayload
 
 	renameIn = &RenameIn{
 		NewDir:  *(*uint64)(unsafe.Pointer(&devFuseFDReadBufPayload[0])),
-		OldName: oldNameNewNameSplit[0],
-		NewName: oldNameNewNameSplit[1],
+		OldName: cloneByteSlice(oldNameNewNameSplit[0], false),
+		NewName: cloneByteSlice(oldNameNewNameSplit[1], true),
 	}
 
 	errno = volume.callbacks.DoRename(inHeader, renameIn)
@@ -340,7 +340,7 @@ func (volume *volumeStruct) doLink(inHeader *InHeader, devFuseFDReadBufPayload [
 
 	linkIn = &LinkIn{
 		OldNodeID: *(*uint64)(unsafe.Pointer(&devFuseFDReadBufPayload[0])),
-		Name:      devFuseFDReadBufPayload[LinkInFixedPortionSize:(len(devFuseFDReadBufPayload) - 1)],
+		Name:      cloneByteSlice(devFuseFDReadBufPayload[LinkInFixedPortionSize:], true),
 	}
 
 	errno = volume.callbacks.DoLink(inHeader, linkIn)
@@ -439,7 +439,7 @@ func (volume *volumeStruct) doWrite(inHeader *InHeader, devFuseFDReadBufPayload 
 		LockOwner:  *(*uint64)(unsafe.Pointer(&devFuseFDReadBufPayload[24])),
 		Flags:      *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[32])),
 		Padding:    *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[36])),
-		Data:       devFuseFDReadBufPayload[WriteInFixedPortionSize:],
+		Data:       cloneByteSlice(devFuseFDReadBufPayload[WriteInFixedPortionSize:], false),
 	}
 
 	if len(writeIn.Data) != int(writeIn.Size) {
@@ -560,7 +560,7 @@ func (volume *volumeStruct) doSetXAttr(inHeader *InHeader, devFuseFDReadBufPaylo
 		return
 	}
 
-	nameDataSplit = bytes.SplitN(devFuseFDReadBufPayload[SetXAttrInFixedPortionSize:], []byte{0}, 1)
+	nameDataSplit = bytes.SplitN(devFuseFDReadBufPayload[SetXAttrInFixedPortionSize:], []byte{0}, 2)
 	if len(nameDataSplit) != 2 {
 		volume.logger.Printf("Call to doSetXAttr() with bad devFuseFDReadBufPayload")
 		volume.devFuseFDWriter(inHeader, syscall.EINVAL)
@@ -570,8 +570,8 @@ func (volume *volumeStruct) doSetXAttr(inHeader *InHeader, devFuseFDReadBufPaylo
 	setXAttrIn = &SetXAttrIn{
 		Size:  *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[0])),
 		Flags: *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[4])),
-		Name:  nameDataSplit[0],
-		Data:  nameDataSplit[1],
+		Name:  cloneByteSlice(nameDataSplit[0], false),
+		Data:  cloneByteSlice(nameDataSplit[1], true),
 	}
 
 	setXAttrInSize = SetXAttrInFixedPortionSize + len(setXAttrIn.Name) + 1 + len(setXAttrIn.Data)
@@ -604,7 +604,7 @@ func (volume *volumeStruct) doGetXAttr(inHeader *InHeader, devFuseFDReadBufPaylo
 	getXAttrIn = &GetXAttrIn{
 		Size:    *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[0])),
 		Padding: *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[4])),
-		Name:    devFuseFDReadBufPayload[GetXAttrInFixedPortionSize:(len(devFuseFDReadBufPayload) - 1)],
+		Name:    cloneByteSlice(devFuseFDReadBufPayload[GetXAttrInFixedPortionSize:], true),
 	}
 
 	getXAttrOut, errno = volume.callbacks.DoGetXAttr(inHeader, getXAttrIn)
@@ -613,12 +613,14 @@ func (volume *volumeStruct) doGetXAttr(inHeader *InHeader, devFuseFDReadBufPaylo
 		return
 	}
 
-	outPayload = make([]byte, GetXAttrOutFixedPortionSize+len(getXAttrOut.Data))
+	if 0 == getXAttrIn.Size {
+		outPayload = make([]byte, GetXAttrOutSizeOnlySize)
 
-	*(*uint32)(unsafe.Pointer(&outPayload[0])) = uint32(len(getXAttrOut.Data))
-	*(*uint32)(unsafe.Pointer(&outPayload[4])) = getXAttrOut.Padding
-
-	copy(outPayload[GetXAttrOutFixedPortionSize:], getXAttrOut.Data)
+		*(*uint32)(unsafe.Pointer(&outPayload[0])) = getXAttrOut.Size
+		*(*uint32)(unsafe.Pointer(&outPayload[4])) = getXAttrOut.Padding
+	} else {
+		outPayload = getXAttrOut.Data
+	}
 
 	volume.devFuseFDWriter(inHeader, 0, outPayload)
 }
@@ -629,7 +631,6 @@ func (volume *volumeStruct) doListXAttr(inHeader *InHeader, devFuseFDReadBufPayl
 		listXAttrIn      *ListXAttrIn
 		listXAttrOut     *ListXAttrOut
 		nameElement      []byte
-		nameElementIndex int
 		nameTotalLen     uint32
 		outPayload       []byte
 		outPayloadOffset uint32
@@ -652,32 +653,28 @@ func (volume *volumeStruct) doListXAttr(inHeader *InHeader, devFuseFDReadBufPayl
 		return
 	}
 
-	if 0 == len(listXAttrOut.Name) {
-		nameTotalLen = 0
+	if 0 == listXAttrIn.Size {
+		outPayload = make([]byte, ListXAttrOutSizeOnlySize)
+
+		*(*uint32)(unsafe.Pointer(&outPayload[0])) = listXAttrOut.Size
+		*(*uint32)(unsafe.Pointer(&outPayload[4])) = listXAttrOut.Padding
 	} else {
-		nameTotalLen = uint32(len(listXAttrOut.Name)) - 1
+		nameTotalLen = 0
+
+		if 0 != len(listXAttrOut.Name) {
+			for _, nameElement = range listXAttrOut.Name {
+				nameTotalLen += uint32(len(nameElement) + 1)
+			}
+		}
+
+		outPayload = make([]byte, nameTotalLen)
+
+		outPayloadOffset = 0
 
 		for _, nameElement = range listXAttrOut.Name {
-			nameTotalLen += uint32(len(nameElement))
-		}
-	}
-
-	outPayload = make([]byte, ListXAttrOutFixedPortionSize+nameTotalLen)
-
-	*(*uint32)(unsafe.Pointer(&outPayload[0])) = nameTotalLen
-	*(*uint32)(unsafe.Pointer(&outPayload[4])) = listXAttrOut.Padding
-
-	if 0 != len(listXAttrOut.Name) {
-		outPayloadOffset = ListXAttrOutFixedPortionSize
-
-		for nameElementIndex, nameElement = range listXAttrOut.Name {
-			if 0 != nameElementIndex {
-				outPayload[outPayloadOffset] = 0
-				outPayloadOffset++
-			}
-
 			copy(outPayload[outPayloadOffset:], nameElement)
-			outPayloadOffset += uint32(len(nameElement))
+			outPayloadOffset += uint32(len(nameElement) + 1)
+			outPayload[outPayloadOffset-1] = 0
 		}
 	}
 
@@ -691,7 +688,7 @@ func (volume *volumeStruct) doRemoveXAttr(inHeader *InHeader, devFuseFDReadBufPa
 	)
 
 	removeXAttrIn = &RemoveXAttrIn{
-		Name: devFuseFDReadBufPayload[GetXAttrInFixedPortionSize:(len(devFuseFDReadBufPayload) - 1)],
+		Name: cloneByteSlice(devFuseFDReadBufPayload, true),
 	}
 
 	errno = volume.callbacks.DoRemoveXAttr(inHeader, removeXAttrIn)
@@ -1070,7 +1067,7 @@ func (volume *volumeStruct) doCreate(inHeader *InHeader, devFuseFDReadBufPayload
 		Mode:    *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[4])),
 		UMask:   *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[8])),
 		Padding: *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[12])),
-		Name:    devFuseFDReadBufPayload[CreateInFixedPortionSize:(len(devFuseFDReadBufPayload) - 1)],
+		Name:    cloneByteSlice(devFuseFDReadBufPayload[CreateInFixedPortionSize:], true),
 	}
 
 	createOut, errno = volume.callbacks.DoCreate(inHeader, createIn)
@@ -1403,7 +1400,7 @@ func (volume *volumeStruct) doRename2(inHeader *InHeader, devFuseFDReadBufPayloa
 		return
 	}
 
-	oldNameNewNameSplit = bytes.SplitN(devFuseFDReadBufPayload[Rename2InFixedPortionSize:], []byte{0}, 1)
+	oldNameNewNameSplit = bytes.SplitN(devFuseFDReadBufPayload[Rename2InFixedPortionSize:], []byte{0}, 2)
 	if len(oldNameNewNameSplit) != 2 {
 		volume.logger.Printf("Call to doRename2() with bad devFuseFDReadBufPayload")
 		volume.devFuseFDWriter(inHeader, syscall.EINVAL)
@@ -1414,8 +1411,8 @@ func (volume *volumeStruct) doRename2(inHeader *InHeader, devFuseFDReadBufPayloa
 		NewDir:  *(*uint64)(unsafe.Pointer(&devFuseFDReadBufPayload[0])),
 		Flags:   *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[8])),
 		Padding: *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[12])),
-		OldName: oldNameNewNameSplit[0],
-		NewName: oldNameNewNameSplit[1],
+		OldName: cloneByteSlice(oldNameNewNameSplit[0], false),
+		NewName: cloneByteSlice(oldNameNewNameSplit[1], true),
 	}
 
 	errno = volume.callbacks.DoRename2(inHeader, rename2In)
