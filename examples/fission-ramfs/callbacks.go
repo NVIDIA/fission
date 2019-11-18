@@ -311,9 +311,54 @@ func (dummy *globalsStruct) DoRename(inHeader *fission.InHeader, renameIn *fissi
 func (dummy *globalsStruct) DoLink(inHeader *fission.InHeader, linkIn *fission.LinkIn) (errno syscall.Errno) {
 	return syscall.ENOSYS
 }
+
 func (dummy *globalsStruct) DoOpen(inHeader *fission.InHeader, openIn *fission.OpenIn) (openOut *fission.OpenOut, errno syscall.Errno) {
-	return nil, syscall.ENOSYS
+	var (
+		fileInode      *inodeStruct
+		granted        bool
+		grantedLockSet *grantedLockSetStruct = makeGrantedLockSet()
+		ok             bool
+	)
+
+Restart:
+	grantedLockSet.get(globals.tryLock)
+
+	fileInode, ok = globals.inodeMap[inHeader.NodeID]
+	if !ok {
+		grantedLockSet.freeAll(false)
+		errno = syscall.ENOENT
+		return
+	}
+
+	granted = grantedLockSet.try(fileInode.tryLock)
+	if !granted {
+		grantedLockSet.freeAll(true)
+		goto Restart
+	}
+
+	if syscall.S_IFREG != (fileInode.attr.Mode & syscall.S_IFMT) {
+		grantedLockSet.freeAll(false)
+		errno = syscall.EINVAL
+		return
+	}
+
+	globals.lastFH++
+
+	openOut = &fission.OpenOut{
+		FH:        globals.lastFH,
+		OpenFlags: 0,
+		Padding:   0,
+	}
+
+	globals.fhMap[openOut.FH] = fileInode.nodeID
+	fileInode.fhSet[openOut.FH] = struct{}{}
+
+	grantedLockSet.freeAll(false)
+
+	errno = 0
+	return
 }
+
 func (dummy *globalsStruct) DoRead(inHeader *fission.InHeader, readIn *fission.ReadIn) (readOut *fission.ReadOut, errno syscall.Errno) {
 	return nil, syscall.ENOSYS
 }
@@ -323,9 +368,59 @@ func (dummy *globalsStruct) DoWrite(inHeader *fission.InHeader, writeIn *fission
 func (dummy *globalsStruct) DoStatFS(inHeader *fission.InHeader) (statFSOut *fission.StatFSOut, errno syscall.Errno) {
 	return nil, syscall.ENOSYS
 }
+
 func (dummy *globalsStruct) DoRelease(inHeader *fission.InHeader, releaseIn *fission.ReleaseIn) (errno syscall.Errno) {
-	return syscall.ENOSYS
+	var (
+		fhNodeID       uint64
+		fileInode      *inodeStruct
+		granted        bool
+		grantedLockSet *grantedLockSetStruct = makeGrantedLockSet()
+		ok             bool
+	)
+
+Restart:
+	grantedLockSet.get(globals.tryLock)
+
+	fhNodeID, ok = globals.fhMap[releaseIn.FH]
+	if fhNodeID != inHeader.NodeID {
+		grantedLockSet.freeAll(false)
+		errno = syscall.EINVAL
+		return
+	}
+
+	fileInode, ok = globals.inodeMap[inHeader.NodeID]
+	if !ok {
+		grantedLockSet.freeAll(false)
+		errno = syscall.ENOENT
+		return
+	}
+
+	granted = grantedLockSet.try(fileInode.tryLock)
+	if !granted {
+		grantedLockSet.freeAll(true)
+		goto Restart
+	}
+
+	if syscall.S_IFREG != (fileInode.attr.Mode & syscall.S_IFMT) {
+		grantedLockSet.freeAll(false)
+		errno = syscall.EINVAL
+		return
+	}
+
+	delete(globals.fhMap, releaseIn.FH)
+	delete(fileInode.fhSet, releaseIn.FH)
+
+	if (0 == fileInode.attr.NLink) && (0 == len(fileInode.fhSet)) {
+		delete(globals.inodeMap, inHeader.NodeID)
+		// Note: Other threads could still be blocked obtaining a lock on fileInode
+	}
+
+	grantedLockSet.freeAll(false)
+
+	errno = 0
+	return
 }
+
 func (dummy *globalsStruct) DoFSync(inHeader *fission.InHeader, fSyncIn *fission.FSyncIn) (errno syscall.Errno) {
 	return syscall.ENOSYS
 }
@@ -337,8 +432,6 @@ func (dummy *globalsStruct) DoSetXAttr(inHeader *fission.InHeader, setXAttrIn *f
 		grantedLockSet *grantedLockSetStruct = makeGrantedLockSet()
 		inode          *inodeStruct
 		ok             bool
-		setXAttrInName []byte
-		setXAttrInData []byte
 	)
 
 Restart:
@@ -359,17 +452,14 @@ Restart:
 
 	grantedLockSet.free(globals.tryLock)
 
-	setXAttrInName = cloneByteSlice(setXAttrIn.Name, true)
-	setXAttrInData = cloneByteSlice(setXAttrIn.Data, false)
-
-	ok, err = inode.xattrMap.PatchByKey(setXAttrInName, setXAttrInData)
+	ok, err = inode.xattrMap.PatchByKey(setXAttrIn.Name, setXAttrIn.Data)
 	if nil != err {
 		globals.logger.Printf("func DoSetXAttr(NodeID==%v, Name==%s) failed on .xattrMap.PatchByKey(): %v", inHeader.NodeID, string(setXAttrIn.Name[:]), err)
 		os.Exit(1)
 	}
 
 	if !ok {
-		ok, err = inode.xattrMap.Put(setXAttrInName, setXAttrInData)
+		ok, err = inode.xattrMap.Put(setXAttrIn.Name, setXAttrIn.Data)
 		if nil != err {
 			globals.logger.Printf("func DoSetXAttr(NodeID==%v, Name==%s) failed on .xattrMap.Put(): %v", inHeader.NodeID, string(setXAttrIn.Name[:]), err)
 			os.Exit(1)
@@ -424,21 +514,31 @@ Restart:
 	grantedLockSet.freeAll(false)
 
 	if !ok {
-		errno = syscall.ENOENT
+		errno = syscall.ENODATA
 		return
 	}
 
 	dataAsByteSlice = dataAsValue.([]byte)
 
+	if 0 == getXAttrIn.Size {
+		getXAttrOut = &fission.GetXAttrOut{
+			Size:    uint32(len(dataAsByteSlice)),
+			Padding: 0,
+			Data:    make([]byte, 0),
+		}
+		errno = 0
+		return
+	}
+
 	if uint32(len(dataAsByteSlice)) > getXAttrIn.Size {
-		errno = syscall.E2BIG
+		errno = syscall.ERANGE
 		return
 	}
 
 	getXAttrOut = &fission.GetXAttrOut{
 		Size:    uint32(len(dataAsByteSlice)),
 		Padding: 0,
-		Data:    cloneByteSlice(dataAsByteSlice, false),
+		Data:    cloneByteSlice(dataAsByteSlice),
 	}
 
 	errno = 0
@@ -478,7 +578,7 @@ Restart:
 	grantedLockSet.free(globals.tryLock)
 
 	listXAttrOut = &fission.ListXAttrOut{
-		Size:    0, // unnecessary
+		Size:    0,
 		Padding: 0,
 		Name:    make([][]byte, 0),
 	}
@@ -504,30 +604,24 @@ Restart:
 
 		xattrNameAsByteSlice = xattrNameAsKey.([]byte)
 
-		if 0 == xattrIndex {
-			if uint32(len(xattrNameAsByteSlice)+1) > listXAttrIn.Size {
-				grantedLockSet.freeAll(false)
-				errno = syscall.ENOSPC
-				return
-			}
-
-			totalSize += uint32(len(xattrNameAsByteSlice))
-		} else {
+		if 0 != listXAttrIn.Size {
 			if (totalSize + uint32(len(xattrNameAsByteSlice)+1)) > listXAttrIn.Size {
 				grantedLockSet.freeAll(false)
-				errno = syscall.ENOSPC
+				errno = syscall.ERANGE
 				return
 			}
-
-			totalSize += uint32(len(xattrNameAsByteSlice) + 1)
 		}
 
-		listXAttrOut.Name = append(listXAttrOut.Name, xattrNameAsByteSlice)
+		totalSize += uint32(len(xattrNameAsByteSlice) + 1)
+
+		if 0 != listXAttrIn.Size {
+			listXAttrOut.Name = append(listXAttrOut.Name, xattrNameAsByteSlice)
+		}
 	}
 
 	grantedLockSet.freeAll(false)
 
-	listXAttrOut.Size = totalSize // unnecessary
+	listXAttrOut.Size = totalSize
 
 	errno = 0
 	return
@@ -649,8 +743,54 @@ func (dummy *globalsStruct) DoReadDir(inHeader *fission.InHeader, readDirIn *fis
 }
 
 func (dummy *globalsStruct) DoReleaseDir(inHeader *fission.InHeader, releaseDirIn *fission.ReleaseDirIn) (errno syscall.Errno) {
-	errno = 0
+	var (
+		dirInode       *inodeStruct
+		fhNodeID       uint64
+		granted        bool
+		grantedLockSet *grantedLockSetStruct = makeGrantedLockSet()
+		ok             bool
+	)
 
+Restart:
+	grantedLockSet.get(globals.tryLock)
+
+	fhNodeID, ok = globals.fhMap[releaseDirIn.FH]
+	if fhNodeID != inHeader.NodeID {
+		grantedLockSet.freeAll(false)
+		errno = syscall.EINVAL
+		return
+	}
+
+	dirInode, ok = globals.inodeMap[inHeader.NodeID]
+	if !ok {
+		grantedLockSet.freeAll(false)
+		errno = syscall.ENOENT
+		return
+	}
+
+	granted = grantedLockSet.try(dirInode.tryLock)
+	if !granted {
+		grantedLockSet.freeAll(true)
+		goto Restart
+	}
+
+	if syscall.S_IFDIR != (dirInode.attr.Mode & syscall.S_IFMT) {
+		grantedLockSet.freeAll(false)
+		errno = syscall.ENOTDIR
+		return
+	}
+
+	delete(globals.fhMap, releaseDirIn.FH)
+	delete(dirInode.fhSet, releaseDirIn.FH)
+
+	if (0 == dirInode.attr.NLink) && (0 == len(dirInode.fhSet)) {
+		delete(globals.inodeMap, inHeader.NodeID)
+		// Note: Other threads could still be blocked obtaining a lock on dirInode
+	}
+
+	grantedLockSet.freeAll(false)
+
+	errno = 0
 	return
 }
 
@@ -672,7 +812,6 @@ func (dummy *globalsStruct) DoAccess(inHeader *fission.InHeader, accessIn *fissi
 
 func (dummy *globalsStruct) DoCreate(inHeader *fission.InHeader, createIn *fission.CreateIn) (createOut *fission.CreateOut, errno syscall.Errno) {
 	var (
-		createInName    []byte
 		dirEntInode     *inodeStruct
 		dirEntInodeMode uint32
 		dirInode        *inodeStruct
@@ -683,8 +822,6 @@ func (dummy *globalsStruct) DoCreate(inHeader *fission.InHeader, createIn *fissi
 		unixTimeNowNSec uint32
 		unixTimeNowSec  uint64
 	)
-
-	createInName = cloneByteSlice(createIn.Name, false)
 
 	dirEntInodeMode = uint32(syscall.S_IRWXU | syscall.S_IRWXG | syscall.S_IRWXO)
 	dirEntInodeMode &= createIn.Mode
@@ -713,9 +850,9 @@ Restart:
 		return
 	}
 
-	_, ok, err = dirInode.dirEntryMap.GetByKey(createInName)
+	_, ok, err = dirInode.dirEntryMap.GetByKey(createIn.Name)
 	if nil != err {
-		globals.logger.Printf("func DoCreate(NodeID==%v,Name=%s) failed on .dirEntryMap.GetByKey(): %v", inHeader.NodeID, string(createInName[:]), err)
+		globals.logger.Printf("func DoCreate(NodeID==%v,Name=%s) failed on .dirEntryMap.GetByKey(): %v", inHeader.NodeID, string(createIn.Name[:]), err)
 		os.Exit(1)
 	}
 
@@ -757,13 +894,13 @@ Restart:
 		fhSet:       make(map[uint64]struct{}),
 	}
 
-	ok, err = dirInode.dirEntryMap.Put(createInName, dirEntInode.nodeID)
+	ok, err = dirInode.dirEntryMap.Put(createIn.Name, dirEntInode.nodeID)
 	if nil != err {
-		globals.logger.Printf("func DoCreate(NodeID==%v,Name=%s) failed on .dirEntryMap.Put(): %v", inHeader.NodeID, string(createInName[:]), err)
+		globals.logger.Printf("func DoCreate(NodeID==%v,Name=%s) failed on .dirEntryMap.Put(): %v", inHeader.NodeID, string(createIn.Name[:]), err)
 		os.Exit(1)
 	}
 	if !ok {
-		globals.logger.Printf("func DoCreate(NodeID==%v,Name=%s) .dirEntryMap.Put() returned !ok", inHeader.NodeID, string(createInName[:]))
+		globals.logger.Printf("func DoCreate(NodeID==%v,Name=%s) .dirEntryMap.Put() returned !ok", inHeader.NodeID, string(createIn.Name[:]))
 		os.Exit(1)
 	}
 
@@ -824,9 +961,12 @@ func (dummy *globalsStruct) DoDestroy(inHeader *fission.InHeader) (errno syscall
 func (dummy *globalsStruct) DoPoll(inHeader *fission.InHeader, pollIn *fission.PollIn) (pollOut *fission.PollOut, errno syscall.Errno) {
 	return nil, syscall.ENOSYS
 }
+
 func (dummy *globalsStruct) DoBatchForget(inHeader *fission.InHeader, batchForgetIn *fission.BatchForgetIn) (errno syscall.Errno) {
-	return syscall.ENOSYS
+	errno = 0
+	return
 }
+
 func (dummy *globalsStruct) DoFAllocate(inHeader *fission.InHeader, fAllocateIn *fission.FAllocateIn) (errno syscall.Errno) {
 	return syscall.ENOSYS
 }
@@ -955,7 +1095,7 @@ Restart:
 				Off:     uint64(dirEntPlusIndex) + 1,
 				NameLen: uint32(len(dirEntNameAsByteSlice)), // unnecessary
 				Type:    dirEntInode.attr.Mode & syscall.S_IFMT,
-				Name:    cloneByteSlice(dirEntNameAsByteSlice, false),
+				Name:    cloneByteSlice(dirEntNameAsByteSlice),
 			},
 		}
 	}

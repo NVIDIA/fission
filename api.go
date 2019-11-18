@@ -554,12 +554,12 @@ type GetXAttrIn struct {
 	Name    []byte
 }
 
-const GetXAttrOutFixedPortionSize = 8 // + len(Data)
+const GetXAttrOutSizeOnlySize = 8
 
 type GetXAttrOut struct {
-	Size    uint32 // automatically set to len(Data)
-	Padding uint32
-	Data    []byte
+	Size    uint32 // only returned if GetXAttrIn.Size == 0
+	Padding uint32 // only returned if GetXAttrIn.Size == 0
+	Data    []byte // only returned if GetXAttrIn.Size != 0
 }
 
 const ListXAttrInSize = 8
@@ -569,12 +569,12 @@ type ListXAttrIn struct {
 	Padding uint32
 }
 
-const ListXAttrOutFixedPortionSize = 8 // + SUM[len(Name[i])] + (len(Name) - 1)
+const ListXAttrOutSizeOnlySize = 8
 
 type ListXAttrOut struct {
-	Size    uint32 // automatically set to len(Name) with a '\0' between each Name element
-	Padding uint32
-	Name    [][]byte // byte(0) separated
+	Size    uint32   // only returned if ListXAttrIn.Size == 0... SUM(each Name + trailing '\0')
+	Padding uint32   // only returned if ListXAttrIn.Size == 0
+	Name    [][]byte // only returned if ListXAttrIn.Size != 0... each with trailing '\0'
 }
 
 type RemoveXAttrIn struct {
