@@ -29,6 +29,15 @@ const (
 
 	tryLockBackoffMin = time.Duration(time.Second) // time.Duration(100 * time.Microsecond)
 	tryLockBackoffMax = time.Duration(time.Second) // time.Duration(300 * time.Microsecond)
+
+	accessROK = syscall.S_IROTH // surprisingly not defined as syscall.R_OK
+	accessWOK = syscall.S_IWOTH // surprisingly not defined as syscall.W_OK
+	accessXOK = syscall.S_IXOTH // surprisingly not defined as syscall.X_OK
+
+	accessMask       = syscall.S_IRWXO // used to mask Owner, Group, or Other RWX bits
+	accessOwnerShift = 6
+	accessGroupShift = 3
+	accessOtherShift = 0
 )
 
 type tryLockStruct struct {
@@ -41,10 +50,9 @@ type grantedLockSetStruct struct {
 
 type inodeStruct struct {
 	tryLock     *tryLockStruct
-	nodeID      uint64              // key in globals.inodeMap
 	attr        fission.Attr        // (attr.Mode&syscall.S_IFMT) must be one of syscall.{S_IFDIR|S_IFREG|S_IFLNK}
 	xattrMap    sortedmap.LLRBTree  // key is xattr Name ([]byte); value is xattr Data ([]byte)
-	dirEntryMap sortedmap.LLRBTree  // [S_IFDIR only] key is basename of dirEntry ([]byte); value is nodeID (uint64)
+	dirEntryMap sortedmap.LLRBTree  // [S_IFDIR only] key is basename of dirEntry ([]byte); value is attr.Ino (uint64)
 	fileData    []byte              // [S_IFREG only] zero-filled up to attr.Size contents of file
 	symlinkData []byte              // [S_IFLNK only] target path of symlink
 	fhSet       map[uint64]struct{} // key is FH
@@ -63,10 +71,10 @@ type globalsStruct struct {
 	errChan          chan error
 	xattrMapDummy    *xattrMapDummyStruct
 	dirEntryMapDummy *dirEntryMapDummyStruct
-	inodeMap         map[uint64]*inodeStruct
-	lastNodeID       uint64            // valid NodeID's start at 1... but 1 is the RootDir NodeID
-	fhMap            map[uint64]uint64 // key is FH; value is inodeStruct.nodeID
-	lastFH           uint64            // valid FH's start at 1
+	inodeMap         map[uint64]*inodeStruct // key is inodeStruct.atr.Ino
+	lastNodeID       uint64                  // valid NodeID's start at 1... but 1 is the RootDir NodeID
+	fhMap            map[uint64]uint64       // key is FH; value is inodeStruct.attr.Ino
+	lastFH           uint64                  // valid FH's start at 1
 	volume           fission.Volume
 }
 
@@ -106,7 +114,6 @@ func main() {
 
 	rootInode = &inodeStruct{
 		tryLock: makeTryLock(),
-		nodeID:  1,
 		attr: fission.Attr{
 			Ino:       1,
 			Size:      0,
@@ -143,11 +150,11 @@ func main() {
 	}
 	ok, err = rootInode.dirEntryMap.Put([]byte(".."), uint64(1))
 	if nil != err {
-		globals.logger.Printf("rootInode.dirEntryMap.Put([]byte(\".\"), uint64(1)) failed: %v", err)
+		globals.logger.Printf("rootInode.dirEntryMap.Put([]byte(\"..\"), uint64(1)) failed: %v", err)
 		os.Exit(1)
 	}
 	if !ok {
-		globals.logger.Printf("rootInode.dirEntryMap.Put([]byte(\".\"), uint64(1)) returned !ok")
+		globals.logger.Printf("rootInode.dirEntryMap.Put([]byte(\"..\"), uint64(1)) returned !ok")
 		os.Exit(1)
 	}
 

@@ -41,13 +41,13 @@ type Callbacks interface {
 	DoGetAttr(inHeader *InHeader, getAttrIn *GetAttrIn) (getAttrOut *GetAttrOut, errno syscall.Errno)
 	DoSetAttr(inHeader *InHeader, setAttrIn *SetAttrIn) (setAttrOut *SetAttrOut, errno syscall.Errno)
 	DoReadLink(inHeader *InHeader) (readLinkOut *ReadLinkOut, errno syscall.Errno)
-	DoSymLink(inHeader *InHeader, symLinkIn *SymLinkIn) (errno syscall.Errno)
-	DoMkNod(inHeader *InHeader, mkNodIn *MkNodIn) (errno syscall.Errno)
-	DoMkDir(inHeader *InHeader, mkDirIn *MkDirIn) (errno syscall.Errno)
+	DoSymLink(inHeader *InHeader, symLinkIn *SymLinkIn) (symLinkOut *SymLinkOut, errno syscall.Errno)
+	DoMkNod(inHeader *InHeader, mkNodIn *MkNodIn) (mkNodOut *MkNodOut, errno syscall.Errno)
+	DoMkDir(inHeader *InHeader, mkDirIn *MkDirIn) (mkDirOut *MkDirOut, errno syscall.Errno)
 	DoUnlink(inHeader *InHeader, unlinkIn *UnlinkIn) (errno syscall.Errno)
 	DoRmDir(inHeader *InHeader, rmDirIn *RmDirIn) (errno syscall.Errno)
 	DoRename(inHeader *InHeader, renameIn *RenameIn) (errno syscall.Errno)
-	DoLink(inHeader *InHeader, linkIn *LinkIn) (errno syscall.Errno)
+	DoLink(inHeader *InHeader, linkIn *LinkIn) (linkOut *LinkOut, errno syscall.Errno)
 	DoOpen(inHeader *InHeader, openIn *OpenIn) (openOut *OpenOut, errno syscall.Errno)
 	DoRead(inHeader *InHeader, readIn *ReadIn) (readOut *ReadOut, errno syscall.Errno)
 	DoWrite(inHeader *InHeader, writeIn *WriteIn) (writeOut *WriteOut, errno syscall.Errno)
@@ -71,7 +71,7 @@ type Callbacks interface {
 	DoCreate(inHeader *InHeader, createIn *CreateIn) (createOut *CreateOut, errno syscall.Errno)
 	DoInterrupt(inHeader *InHeader, interruptIn *InterruptIn) (errno syscall.Errno)
 	DoBMap(inHeader *InHeader, bMapIn *BMapIn) (bMapOut *BMapOut, errno syscall.Errno)
-	DoDestroy(inHeader *InHeader) (errno syscall.Errno)
+	DoDestroy(inHeader *InHeader)
 	DoPoll(inHeader *InHeader, pollIn *PollIn) (pollOut *PollOut, errno syscall.Errno)
 	DoBatchForget(inHeader *InHeader, batchForgetIn *BatchForgetIn) (errno syscall.Errno)
 	DoFAllocate(inHeader *InHeader, fAllocateIn *FAllocateIn) (errno syscall.Errno)
@@ -151,11 +151,22 @@ const (
 )
 
 const (
-	FOpenDirectIO = uint32(1) << iota
-	FOpenKeepCache
-	FOpenNonSeekable
-	FOpenCacheDir
-	FOpenStream
+	FOpenRequestRDONLY = uint32(syscall.O_RDONLY)
+	FOpenRequestWRONLY = uint32(syscall.O_WRONLY)
+	FOpenRequestRDWR   = uint32(syscall.O_RDWR)
+	FOpenRequestAPPEND = uint32(syscall.O_APPEND)
+	FOpenRequestCREAT  = uint32(syscall.O_CREAT)
+	FOpenRequestEXCL   = uint32(syscall.O_EXCL)
+	FOpenRequestSYNC   = uint32(syscall.O_SYNC)
+	FOpenRequestTRUNC  = uint32(syscall.O_TRUNC)
+)
+
+const (
+	FOpenResponseDirectIO = uint32(1) << iota
+	FOpenResponseKeepCache
+	FOpenResponseNonSeekable
+	FOpenResponseCacheDir
+	FOpenResponseStream
 )
 
 const (
@@ -323,7 +334,7 @@ const (
 	OpCodeCreate        = uint32(35)
 	OpCodeInterrupt     = uint32(36)
 	OpCodeBMap          = uint32(37)
-	OpCodeDestroy       = uint32(38)
+	OpCodeDestroy       = uint32(38) // no reply
 	OpCodeIoCtl         = uint32(39) // unsupported
 	OpCodePoll          = uint32(40)
 	OpCodeNotifyReply   = uint32(41) // unsupported
@@ -432,12 +443,40 @@ type SymLinkIn struct {
 	Data []byte // byte(0) separated from Name
 }
 
-type MkNodIn struct {
-	Name []byte
+const SymLinkOutSize = EntryOutSize
+
+type SymLinkOut struct {
+	EntryOut
 }
 
+const MkNodInFixedPortionSize = 16 // + len(Name)
+
+type MkNodIn struct {
+	Mode    uint32
+	RDev    uint32
+	UMask   uint32
+	Padding uint32
+	Name    []byte
+}
+
+const MkNodOutSize = EntryOutSize
+
+type MkNodOut struct {
+	EntryOut
+}
+
+const MkDirInFixedPortionSize = 8 // + len(Name)
+
 type MkDirIn struct {
-	Name []byte
+	Mode  uint32
+	UMask uint32
+	Name  []byte
+}
+
+const MkDirOutSize = EntryOutSize
+
+type MkDirOut struct {
+	EntryOut
 }
 
 type UnlinkIn struct {
@@ -463,10 +502,16 @@ type LinkIn struct {
 	Name      []byte
 }
 
+const LinkOutSize = EntryOutSize
+
+type LinkOut struct {
+	EntryOut
+}
+
 const OpenInSize = 8
 
 type OpenIn struct {
-	Flags  uint32
+	Flags  uint32 // mask of const FOpenRequest* bits
 	Unused uint32
 }
 
@@ -474,7 +519,7 @@ const OpenOutSize = 16
 
 type OpenOut struct {
 	FH        uint64
-	OpenFlags uint32 // mask of const FOpen* bits
+	OpenFlags uint32 // mask of const FOpenResponse* bits
 	Padding   uint32
 }
 
@@ -705,20 +750,20 @@ type AccessIn struct {
 const CreateInFixedPortionSize = 16 // + len(Name)
 
 type CreateIn struct {
-	Flags   uint32
+	Flags   uint32 // mask of const FOpenRequest* bits
 	Mode    uint32
 	UMask   uint32
 	Padding uint32
 	Name    []byte
 }
 
-const CreateOutSize = 16 + EntryOutSize
+const CreateOutSize = EntryOutSize + 16
 
 type CreateOut struct {
-	FH        uint64
-	OpenFlags uint32
-	Padding   uint32
 	EntryOut
+	FH        uint64
+	OpenFlags uint32 // mask of const FOpenResponse* bits
+	Padding   uint32
 }
 
 const InterruptInSize = 8
