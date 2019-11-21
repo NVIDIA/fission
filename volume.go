@@ -47,6 +47,7 @@ func newVolume(volumeName string, mountpointDirPath string, mountFlags uintptr, 
 
 func (volume *volumeStruct) DoMount() (err error) {
 	var (
+		allowOtherOption     string
 		devFuseFDMountOption string
 		gid                  int
 		gidMountOption       string
@@ -78,8 +79,13 @@ func (volume *volumeStruct) DoMount() (err error) {
 
 	uidMountOption = fmt.Sprintf("user_id=%d", uid)
 	gidMountOption = fmt.Sprintf("group_id=%d", gid)
+	allowOtherOption = "allow_other"
 
-	mountOptions = devFuseFDMountOption + "," + rootModeMountOption + "," + uidMountOption + "," + gidMountOption
+	mountOptions = devFuseFDMountOption +
+		"," + rootModeMountOption +
+		"," + uidMountOption +
+		"," + gidMountOption +
+		"," + allowOtherOption
 
 	err = syscall.Mount(volume.volumeName, volume.mountpointDirPath, "fuse", volume.mountFlags, mountOptions)
 	if nil == err {
@@ -286,7 +292,6 @@ func (volume *volumeStruct) processDevFuseFDReadBuf(devFuseFDReadBuf []byte) {
 func (volume *volumeStruct) devFuseFDWriter(inHeader *InHeader, errno syscall.Errno, bufs ...[]byte) {
 	var (
 		buf          []byte
-		bufIndex     int
 		bytesWritten uintptr
 		iovec        []syscall.Iovec
 		iovecSpan    uintptr
@@ -299,26 +304,34 @@ func (volume *volumeStruct) devFuseFDWriter(inHeader *InHeader, errno syscall.Er
 		volume.logger.Printf("Read unsupported/unrecognized message OpCode == %v", inHeader.OpCode)
 	}
 
-	// Construct iovec elements for supplied bufs (if any)
-
-	iovec = make([]syscall.Iovec, len(bufs)+1)
-	iovecSpan = 0
-
-	for bufIndex, buf = range bufs {
-		iovec[bufIndex+1] = syscall.Iovec{Base: &buf[0], Len: uint64(len(buf))}
-		iovecSpan += uintptr(len(buf))
-	}
-
-	// Now go back and compute outHeader and prepend to iovec
+	// Construct outHeader w/out knowing iovecSpan and put it in iovec[0]
 
 	outHeader = make([]byte, OutHeaderSize)
-	iovecSpan += uintptr(OutHeaderSize)
 
-	*(*uint32)(unsafe.Pointer(&outHeader[0])) = uint32(iovecSpan)
+	iovecSpan = uintptr(OutHeaderSize)
+
+	*(*uint32)(unsafe.Pointer(&outHeader[0])) = uint32(iovecSpan) // Updated later
 	*(*int32)(unsafe.Pointer(&outHeader[4])) = -int32(errno)
 	*(*uint64)(unsafe.Pointer(&outHeader[8])) = inHeader.Unique
 
+	iovec = make([]syscall.Iovec, 1, len(bufs)+1)
+
 	iovec[0] = syscall.Iovec{Base: &outHeader[0], Len: uint64(OutHeaderSize)}
+
+	// Construct iovec elements for supplied bufs (if any)
+
+	for _, buf = range bufs {
+		if 0 != len(buf) {
+			iovec = append(iovec, syscall.Iovec{Base: &buf[0], Len: uint64(len(buf))})
+			iovecSpan += uintptr(len(buf))
+		}
+	}
+
+	// Now go back and update outHeader
+
+	*(*uint32)(unsafe.Pointer(&outHeader[0])) = uint32(iovecSpan)
+
+	// Finally, send iovec to /dev/fuse
 
 	bytesWritten, _, errno = syscall.Syscall(
 		syscall.SYS_WRITEV,
@@ -332,4 +345,15 @@ func (volume *volumeStruct) devFuseFDWriter(inHeader *InHeader, errno syscall.Er
 	} else {
 		volume.logger.Printf("Write to /dev/fuse returned bad errno: %v", errno)
 	}
+}
+
+func cloneByteSlice(inBuf []byte, andTrimTrailingNullByte bool) (outBuf []byte) {
+	outBuf = make([]byte, len(inBuf))
+	if 0 != len(inBuf) {
+		_ = copy(outBuf, inBuf)
+		if andTrimTrailingNullByte && (0 == outBuf[len(outBuf)-1]) {
+			outBuf = outBuf[:len(outBuf)-1]
+		}
+	}
+	return
 }

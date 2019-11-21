@@ -15,7 +15,7 @@ func (volume *volumeStruct) doLookup(inHeader *InHeader, devFuseFDReadBufPayload
 	)
 
 	lookupIn = &LookupIn{
-		Name: devFuseFDReadBufPayload,
+		Name: cloneByteSlice(devFuseFDReadBufPayload, true),
 	}
 
 	lookupOut, errno = volume.callbacks.DoLookup(inHeader, lookupIn)
@@ -26,29 +26,29 @@ func (volume *volumeStruct) doLookup(inHeader *InHeader, devFuseFDReadBufPayload
 
 	outPayload = make([]byte, LookupOutSize)
 
-	*(*uint64)(unsafe.Pointer(&outPayload[0])) = lookupOut.NodeID
-	*(*uint64)(unsafe.Pointer(&outPayload[8])) = lookupOut.Generation
-	*(*uint64)(unsafe.Pointer(&outPayload[16])) = lookupOut.EntryValidSec
-	*(*uint64)(unsafe.Pointer(&outPayload[24])) = lookupOut.AttrValidSec
-	*(*uint32)(unsafe.Pointer(&outPayload[32])) = lookupOut.EntryValidNSec
-	*(*uint32)(unsafe.Pointer(&outPayload[36])) = lookupOut.AttrValidNSec
+	*(*uint64)(unsafe.Pointer(&outPayload[0])) = lookupOut.EntryOut.NodeID
+	*(*uint64)(unsafe.Pointer(&outPayload[8])) = lookupOut.EntryOut.Generation
+	*(*uint64)(unsafe.Pointer(&outPayload[16])) = lookupOut.EntryOut.EntryValidSec
+	*(*uint64)(unsafe.Pointer(&outPayload[24])) = lookupOut.EntryOut.AttrValidSec
+	*(*uint32)(unsafe.Pointer(&outPayload[32])) = lookupOut.EntryOut.EntryValidNSec
+	*(*uint32)(unsafe.Pointer(&outPayload[36])) = lookupOut.EntryOut.AttrValidNSec
 
-	*(*uint64)(unsafe.Pointer(&outPayload[40])) = lookupOut.Ino
-	*(*uint64)(unsafe.Pointer(&outPayload[48])) = lookupOut.Size
-	*(*uint64)(unsafe.Pointer(&outPayload[56])) = lookupOut.Blocks
-	*(*uint64)(unsafe.Pointer(&outPayload[64])) = lookupOut.ATimeSec
-	*(*uint64)(unsafe.Pointer(&outPayload[72])) = lookupOut.MTimeSec
-	*(*uint64)(unsafe.Pointer(&outPayload[80])) = lookupOut.CTimeSec
-	*(*uint32)(unsafe.Pointer(&outPayload[88])) = lookupOut.ATimeNSec
-	*(*uint32)(unsafe.Pointer(&outPayload[92])) = lookupOut.MTimeNSec
-	*(*uint32)(unsafe.Pointer(&outPayload[96])) = lookupOut.CTimeNSec
-	*(*uint32)(unsafe.Pointer(&outPayload[100])) = lookupOut.Mode
-	*(*uint32)(unsafe.Pointer(&outPayload[104])) = lookupOut.NLink
-	*(*uint32)(unsafe.Pointer(&outPayload[108])) = lookupOut.UID
-	*(*uint32)(unsafe.Pointer(&outPayload[112])) = lookupOut.GID
-	*(*uint32)(unsafe.Pointer(&outPayload[116])) = lookupOut.RDev
-	*(*uint32)(unsafe.Pointer(&outPayload[120])) = lookupOut.BlkSize
-	*(*uint32)(unsafe.Pointer(&outPayload[124])) = lookupOut.Padding
+	*(*uint64)(unsafe.Pointer(&outPayload[40])) = lookupOut.EntryOut.Attr.Ino
+	*(*uint64)(unsafe.Pointer(&outPayload[48])) = lookupOut.EntryOut.Attr.Size
+	*(*uint64)(unsafe.Pointer(&outPayload[56])) = lookupOut.EntryOut.Attr.Blocks
+	*(*uint64)(unsafe.Pointer(&outPayload[64])) = lookupOut.EntryOut.Attr.ATimeSec
+	*(*uint64)(unsafe.Pointer(&outPayload[72])) = lookupOut.EntryOut.Attr.MTimeSec
+	*(*uint64)(unsafe.Pointer(&outPayload[80])) = lookupOut.EntryOut.Attr.CTimeSec
+	*(*uint32)(unsafe.Pointer(&outPayload[88])) = lookupOut.EntryOut.Attr.ATimeNSec
+	*(*uint32)(unsafe.Pointer(&outPayload[92])) = lookupOut.EntryOut.Attr.MTimeNSec
+	*(*uint32)(unsafe.Pointer(&outPayload[96])) = lookupOut.EntryOut.Attr.CTimeNSec
+	*(*uint32)(unsafe.Pointer(&outPayload[100])) = lookupOut.EntryOut.Attr.Mode
+	*(*uint32)(unsafe.Pointer(&outPayload[104])) = lookupOut.EntryOut.Attr.NLink
+	*(*uint32)(unsafe.Pointer(&outPayload[108])) = lookupOut.EntryOut.Attr.UID
+	*(*uint32)(unsafe.Pointer(&outPayload[112])) = lookupOut.EntryOut.Attr.GID
+	*(*uint32)(unsafe.Pointer(&outPayload[116])) = lookupOut.EntryOut.Attr.RDev
+	*(*uint32)(unsafe.Pointer(&outPayload[120])) = lookupOut.EntryOut.Attr.BlkSize
+	*(*uint32)(unsafe.Pointer(&outPayload[124])) = lookupOut.EntryOut.Attr.Padding
 
 	volume.devFuseFDWriter(inHeader, 0, outPayload)
 }
@@ -102,30 +102,32 @@ func (volume *volumeStruct) doGetAttr(inHeader *InHeader, devFuseFDReadBufPayloa
 	*(*uint32)(unsafe.Pointer(&outPayload[8])) = getAttrOut.AttrValidNSec
 	*(*uint32)(unsafe.Pointer(&outPayload[12])) = getAttrOut.Dummy
 
-	*(*uint64)(unsafe.Pointer(&outPayload[16])) = getAttrOut.Ino
-	*(*uint64)(unsafe.Pointer(&outPayload[24])) = getAttrOut.Size
-	*(*uint64)(unsafe.Pointer(&outPayload[32])) = getAttrOut.Blocks
-	*(*uint64)(unsafe.Pointer(&outPayload[40])) = getAttrOut.ATimeSec
-	*(*uint64)(unsafe.Pointer(&outPayload[48])) = getAttrOut.MTimeSec
-	*(*uint64)(unsafe.Pointer(&outPayload[56])) = getAttrOut.CTimeSec
-	*(*uint32)(unsafe.Pointer(&outPayload[64])) = getAttrOut.ATimeNSec
-	*(*uint32)(unsafe.Pointer(&outPayload[68])) = getAttrOut.MTimeNSec
-	*(*uint32)(unsafe.Pointer(&outPayload[72])) = getAttrOut.CTimeNSec
-	*(*uint32)(unsafe.Pointer(&outPayload[76])) = getAttrOut.Mode
-	*(*uint32)(unsafe.Pointer(&outPayload[80])) = getAttrOut.NLink
-	*(*uint32)(unsafe.Pointer(&outPayload[84])) = getAttrOut.UID
-	*(*uint32)(unsafe.Pointer(&outPayload[88])) = getAttrOut.GID
-	*(*uint32)(unsafe.Pointer(&outPayload[92])) = getAttrOut.RDev
-	*(*uint32)(unsafe.Pointer(&outPayload[96])) = getAttrOut.BlkSize
-	*(*uint32)(unsafe.Pointer(&outPayload[100])) = getAttrOut.Padding
+	*(*uint64)(unsafe.Pointer(&outPayload[16])) = getAttrOut.Attr.Ino
+	*(*uint64)(unsafe.Pointer(&outPayload[24])) = getAttrOut.Attr.Size
+	*(*uint64)(unsafe.Pointer(&outPayload[32])) = getAttrOut.Attr.Blocks
+	*(*uint64)(unsafe.Pointer(&outPayload[40])) = getAttrOut.Attr.ATimeSec
+	*(*uint64)(unsafe.Pointer(&outPayload[48])) = getAttrOut.Attr.MTimeSec
+	*(*uint64)(unsafe.Pointer(&outPayload[56])) = getAttrOut.Attr.CTimeSec
+	*(*uint32)(unsafe.Pointer(&outPayload[64])) = getAttrOut.Attr.ATimeNSec
+	*(*uint32)(unsafe.Pointer(&outPayload[68])) = getAttrOut.Attr.MTimeNSec
+	*(*uint32)(unsafe.Pointer(&outPayload[72])) = getAttrOut.Attr.CTimeNSec
+	*(*uint32)(unsafe.Pointer(&outPayload[76])) = getAttrOut.Attr.Mode
+	*(*uint32)(unsafe.Pointer(&outPayload[80])) = getAttrOut.Attr.NLink
+	*(*uint32)(unsafe.Pointer(&outPayload[84])) = getAttrOut.Attr.UID
+	*(*uint32)(unsafe.Pointer(&outPayload[88])) = getAttrOut.Attr.GID
+	*(*uint32)(unsafe.Pointer(&outPayload[92])) = getAttrOut.Attr.RDev
+	*(*uint32)(unsafe.Pointer(&outPayload[96])) = getAttrOut.Attr.BlkSize
+	*(*uint32)(unsafe.Pointer(&outPayload[100])) = getAttrOut.Attr.Padding
 
 	volume.devFuseFDWriter(inHeader, 0, outPayload)
 }
 
 func (volume *volumeStruct) doSetAttr(inHeader *InHeader, devFuseFDReadBufPayload []byte) {
 	var (
-		errno     syscall.Errno
-		setAttrIn *SetAttrIn
+		errno      syscall.Errno
+		outPayload []byte
+		setAttrIn  *SetAttrIn
+		setAttrOut *SetAttrOut
 	)
 
 	if len(devFuseFDReadBufPayload) != SetAttrInSize {
@@ -153,9 +155,36 @@ func (volume *volumeStruct) doSetAttr(inHeader *InHeader, devFuseFDReadBufPayloa
 		Unused5:   *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[84])),
 	}
 
-	errno = volume.callbacks.DoSetAttr(inHeader, setAttrIn)
+	setAttrOut, errno = volume.callbacks.DoSetAttr(inHeader, setAttrIn)
+	if 0 != errno {
+		volume.devFuseFDWriter(inHeader, errno)
+		return
+	}
 
-	volume.devFuseFDWriter(inHeader, errno)
+	outPayload = make([]byte, SetAttrOutSize)
+
+	*(*uint64)(unsafe.Pointer(&outPayload[0])) = setAttrOut.AttrValidSec
+	*(*uint32)(unsafe.Pointer(&outPayload[8])) = setAttrOut.AttrValidNSec
+	*(*uint32)(unsafe.Pointer(&outPayload[12])) = setAttrOut.Dummy
+
+	*(*uint64)(unsafe.Pointer(&outPayload[16])) = setAttrOut.Attr.Ino
+	*(*uint64)(unsafe.Pointer(&outPayload[24])) = setAttrOut.Attr.Size
+	*(*uint64)(unsafe.Pointer(&outPayload[32])) = setAttrOut.Attr.Blocks
+	*(*uint64)(unsafe.Pointer(&outPayload[40])) = setAttrOut.Attr.ATimeSec
+	*(*uint64)(unsafe.Pointer(&outPayload[48])) = setAttrOut.Attr.MTimeSec
+	*(*uint64)(unsafe.Pointer(&outPayload[56])) = setAttrOut.Attr.CTimeSec
+	*(*uint32)(unsafe.Pointer(&outPayload[64])) = setAttrOut.Attr.ATimeNSec
+	*(*uint32)(unsafe.Pointer(&outPayload[68])) = setAttrOut.Attr.MTimeNSec
+	*(*uint32)(unsafe.Pointer(&outPayload[72])) = setAttrOut.Attr.CTimeNSec
+	*(*uint32)(unsafe.Pointer(&outPayload[76])) = setAttrOut.Attr.Mode
+	*(*uint32)(unsafe.Pointer(&outPayload[80])) = setAttrOut.Attr.NLink
+	*(*uint32)(unsafe.Pointer(&outPayload[84])) = setAttrOut.Attr.UID
+	*(*uint32)(unsafe.Pointer(&outPayload[88])) = setAttrOut.Attr.GID
+	*(*uint32)(unsafe.Pointer(&outPayload[92])) = setAttrOut.Attr.RDev
+	*(*uint32)(unsafe.Pointer(&outPayload[96])) = setAttrOut.Attr.BlkSize
+	*(*uint32)(unsafe.Pointer(&outPayload[100])) = setAttrOut.Attr.Padding
+
+	volume.devFuseFDWriter(inHeader, 0, outPayload)
 }
 
 func (volume *volumeStruct) doReadLink(inHeader *InHeader, devFuseFDReadBufPayload []byte) {
@@ -186,10 +215,12 @@ func (volume *volumeStruct) doSymLink(inHeader *InHeader, devFuseFDReadBufPayloa
 	var (
 		errno         syscall.Errno
 		nameDataSplit [][]byte
+		outPayload    []byte
 		symLinkIn     *SymLinkIn
+		symLinkOut    *SymLinkOut
 	)
 
-	nameDataSplit = bytes.SplitN(devFuseFDReadBufPayload, []byte{0}, 1)
+	nameDataSplit = bytes.SplitN(devFuseFDReadBufPayload, []byte{0}, 2)
 	if len(nameDataSplit) != 2 {
 		volume.logger.Printf("Call to doSymLink() with bad devFuseFDReadBufPayload")
 		volume.devFuseFDWriter(inHeader, syscall.EINVAL)
@@ -197,43 +228,155 @@ func (volume *volumeStruct) doSymLink(inHeader *InHeader, devFuseFDReadBufPayloa
 	}
 
 	symLinkIn = &SymLinkIn{
-		Name: nameDataSplit[0],
-		Data: nameDataSplit[1],
+		Name: cloneByteSlice(nameDataSplit[0], false),
+		Data: cloneByteSlice(nameDataSplit[1], true),
 	}
 
-	errno = volume.callbacks.DoSymLink(inHeader, symLinkIn)
+	symLinkOut, errno = volume.callbacks.DoSymLink(inHeader, symLinkIn)
+	if 0 != errno {
+		volume.devFuseFDWriter(inHeader, errno)
+		return
+	}
 
-	volume.devFuseFDWriter(inHeader, errno)
+	outPayload = make([]byte, SymLinkOutSize)
+
+	*(*uint64)(unsafe.Pointer(&outPayload[0])) = symLinkOut.EntryOut.NodeID
+	*(*uint64)(unsafe.Pointer(&outPayload[8])) = symLinkOut.EntryOut.Generation
+	*(*uint64)(unsafe.Pointer(&outPayload[16])) = symLinkOut.EntryOut.EntryValidSec
+	*(*uint64)(unsafe.Pointer(&outPayload[24])) = symLinkOut.EntryOut.AttrValidSec
+	*(*uint32)(unsafe.Pointer(&outPayload[32])) = symLinkOut.EntryOut.EntryValidNSec
+	*(*uint32)(unsafe.Pointer(&outPayload[36])) = symLinkOut.EntryOut.AttrValidNSec
+
+	*(*uint64)(unsafe.Pointer(&outPayload[40])) = symLinkOut.EntryOut.Attr.Ino
+	*(*uint64)(unsafe.Pointer(&outPayload[48])) = symLinkOut.EntryOut.Attr.Size
+	*(*uint64)(unsafe.Pointer(&outPayload[56])) = symLinkOut.EntryOut.Attr.Blocks
+	*(*uint64)(unsafe.Pointer(&outPayload[64])) = symLinkOut.EntryOut.Attr.ATimeSec
+	*(*uint64)(unsafe.Pointer(&outPayload[72])) = symLinkOut.EntryOut.Attr.MTimeSec
+	*(*uint64)(unsafe.Pointer(&outPayload[80])) = symLinkOut.EntryOut.Attr.CTimeSec
+	*(*uint32)(unsafe.Pointer(&outPayload[88])) = symLinkOut.EntryOut.Attr.ATimeNSec
+	*(*uint32)(unsafe.Pointer(&outPayload[92])) = symLinkOut.EntryOut.Attr.MTimeNSec
+	*(*uint32)(unsafe.Pointer(&outPayload[96])) = symLinkOut.EntryOut.Attr.CTimeNSec
+	*(*uint32)(unsafe.Pointer(&outPayload[100])) = symLinkOut.EntryOut.Attr.Mode
+	*(*uint32)(unsafe.Pointer(&outPayload[104])) = symLinkOut.EntryOut.Attr.NLink
+	*(*uint32)(unsafe.Pointer(&outPayload[108])) = symLinkOut.EntryOut.Attr.UID
+	*(*uint32)(unsafe.Pointer(&outPayload[112])) = symLinkOut.EntryOut.Attr.GID
+	*(*uint32)(unsafe.Pointer(&outPayload[116])) = symLinkOut.EntryOut.Attr.RDev
+	*(*uint32)(unsafe.Pointer(&outPayload[120])) = symLinkOut.EntryOut.Attr.BlkSize
+	*(*uint32)(unsafe.Pointer(&outPayload[124])) = symLinkOut.EntryOut.Attr.Padding
+
+	volume.devFuseFDWriter(inHeader, 0, outPayload)
 }
 
 func (volume *volumeStruct) doMkNod(inHeader *InHeader, devFuseFDReadBufPayload []byte) {
 	var (
-		errno   syscall.Errno
-		mkNodIn *MkNodIn
+		errno      syscall.Errno
+		mkNodIn    *MkNodIn
+		mkNodOut   *MkNodOut
+		outPayload []byte
 	)
 
-	mkNodIn = &MkNodIn{
-		Name: devFuseFDReadBufPayload,
+	if len(devFuseFDReadBufPayload) < MkNodInFixedPortionSize {
+		volume.logger.Printf("Call to doMkNod() with bad len(devFuseFDReadBufPayload) == %v", len(devFuseFDReadBufPayload))
+		volume.devFuseFDWriter(inHeader, syscall.EINVAL)
+		return
 	}
 
-	errno = volume.callbacks.DoMkNod(inHeader, mkNodIn)
+	mkNodIn = &MkNodIn{
+		Mode:    *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[0])),
+		RDev:    *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[4])),
+		UMask:   *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[8])),
+		Padding: *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[12])),
+		Name:    cloneByteSlice(devFuseFDReadBufPayload[MkNodInFixedPortionSize:], true),
+	}
 
-	volume.devFuseFDWriter(inHeader, errno)
+	mkNodOut, errno = volume.callbacks.DoMkNod(inHeader, mkNodIn)
+	if 0 != errno {
+		volume.devFuseFDWriter(inHeader, errno)
+		return
+	}
+
+	outPayload = make([]byte, MkNodOutSize)
+
+	*(*uint64)(unsafe.Pointer(&outPayload[0])) = mkNodOut.EntryOut.NodeID
+	*(*uint64)(unsafe.Pointer(&outPayload[8])) = mkNodOut.EntryOut.Generation
+	*(*uint64)(unsafe.Pointer(&outPayload[16])) = mkNodOut.EntryOut.EntryValidSec
+	*(*uint64)(unsafe.Pointer(&outPayload[24])) = mkNodOut.EntryOut.AttrValidSec
+	*(*uint32)(unsafe.Pointer(&outPayload[32])) = mkNodOut.EntryOut.EntryValidNSec
+	*(*uint32)(unsafe.Pointer(&outPayload[36])) = mkNodOut.EntryOut.AttrValidNSec
+
+	*(*uint64)(unsafe.Pointer(&outPayload[40])) = mkNodOut.EntryOut.Attr.Ino
+	*(*uint64)(unsafe.Pointer(&outPayload[48])) = mkNodOut.EntryOut.Attr.Size
+	*(*uint64)(unsafe.Pointer(&outPayload[56])) = mkNodOut.EntryOut.Attr.Blocks
+	*(*uint64)(unsafe.Pointer(&outPayload[64])) = mkNodOut.EntryOut.Attr.ATimeSec
+	*(*uint64)(unsafe.Pointer(&outPayload[72])) = mkNodOut.EntryOut.Attr.MTimeSec
+	*(*uint64)(unsafe.Pointer(&outPayload[80])) = mkNodOut.EntryOut.Attr.CTimeSec
+	*(*uint32)(unsafe.Pointer(&outPayload[88])) = mkNodOut.EntryOut.Attr.ATimeNSec
+	*(*uint32)(unsafe.Pointer(&outPayload[92])) = mkNodOut.EntryOut.Attr.MTimeNSec
+	*(*uint32)(unsafe.Pointer(&outPayload[96])) = mkNodOut.EntryOut.Attr.CTimeNSec
+	*(*uint32)(unsafe.Pointer(&outPayload[100])) = mkNodOut.EntryOut.Attr.Mode
+	*(*uint32)(unsafe.Pointer(&outPayload[104])) = mkNodOut.EntryOut.Attr.NLink
+	*(*uint32)(unsafe.Pointer(&outPayload[108])) = mkNodOut.EntryOut.Attr.UID
+	*(*uint32)(unsafe.Pointer(&outPayload[112])) = mkNodOut.EntryOut.Attr.GID
+	*(*uint32)(unsafe.Pointer(&outPayload[116])) = mkNodOut.EntryOut.Attr.RDev
+	*(*uint32)(unsafe.Pointer(&outPayload[120])) = mkNodOut.EntryOut.Attr.BlkSize
+	*(*uint32)(unsafe.Pointer(&outPayload[124])) = mkNodOut.EntryOut.Attr.Padding
+
+	volume.devFuseFDWriter(inHeader, 0, outPayload)
 }
 
 func (volume *volumeStruct) doMkDir(inHeader *InHeader, devFuseFDReadBufPayload []byte) {
 	var (
-		errno   syscall.Errno
-		mkDirIn *MkDirIn
+		errno      syscall.Errno
+		mkDirIn    *MkDirIn
+		mkDirOut   *MkDirOut
+		outPayload []byte
 	)
 
-	mkDirIn = &MkDirIn{
-		Name: devFuseFDReadBufPayload,
+	if len(devFuseFDReadBufPayload) < MkDirInFixedPortionSize {
+		volume.logger.Printf("Call to doMkNod() with bad len(devFuseFDReadBufPayload) == %v", len(devFuseFDReadBufPayload))
+		volume.devFuseFDWriter(inHeader, syscall.EINVAL)
+		return
 	}
 
-	errno = volume.callbacks.DoMkDir(inHeader, mkDirIn)
+	mkDirIn = &MkDirIn{
+		Mode:  *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[0])),
+		UMask: *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[4])),
+		Name:  cloneByteSlice(devFuseFDReadBufPayload[MkDirInFixedPortionSize:], true),
+	}
 
-	volume.devFuseFDWriter(inHeader, errno)
+	mkDirOut, errno = volume.callbacks.DoMkDir(inHeader, mkDirIn)
+	if 0 != errno {
+		volume.devFuseFDWriter(inHeader, errno)
+		return
+	}
+
+	outPayload = make([]byte, MkDirOutSize)
+
+	*(*uint64)(unsafe.Pointer(&outPayload[0])) = mkDirOut.EntryOut.NodeID
+	*(*uint64)(unsafe.Pointer(&outPayload[8])) = mkDirOut.EntryOut.Generation
+	*(*uint64)(unsafe.Pointer(&outPayload[16])) = mkDirOut.EntryOut.EntryValidSec
+	*(*uint64)(unsafe.Pointer(&outPayload[24])) = mkDirOut.EntryOut.AttrValidSec
+	*(*uint32)(unsafe.Pointer(&outPayload[32])) = mkDirOut.EntryOut.EntryValidNSec
+	*(*uint32)(unsafe.Pointer(&outPayload[36])) = mkDirOut.EntryOut.AttrValidNSec
+
+	*(*uint64)(unsafe.Pointer(&outPayload[40])) = mkDirOut.EntryOut.Attr.Ino
+	*(*uint64)(unsafe.Pointer(&outPayload[48])) = mkDirOut.EntryOut.Attr.Size
+	*(*uint64)(unsafe.Pointer(&outPayload[56])) = mkDirOut.EntryOut.Attr.Blocks
+	*(*uint64)(unsafe.Pointer(&outPayload[64])) = mkDirOut.EntryOut.Attr.ATimeSec
+	*(*uint64)(unsafe.Pointer(&outPayload[72])) = mkDirOut.EntryOut.Attr.MTimeSec
+	*(*uint64)(unsafe.Pointer(&outPayload[80])) = mkDirOut.EntryOut.Attr.CTimeSec
+	*(*uint32)(unsafe.Pointer(&outPayload[88])) = mkDirOut.EntryOut.Attr.ATimeNSec
+	*(*uint32)(unsafe.Pointer(&outPayload[92])) = mkDirOut.EntryOut.Attr.MTimeNSec
+	*(*uint32)(unsafe.Pointer(&outPayload[96])) = mkDirOut.EntryOut.Attr.CTimeNSec
+	*(*uint32)(unsafe.Pointer(&outPayload[100])) = mkDirOut.EntryOut.Attr.Mode
+	*(*uint32)(unsafe.Pointer(&outPayload[104])) = mkDirOut.EntryOut.Attr.NLink
+	*(*uint32)(unsafe.Pointer(&outPayload[108])) = mkDirOut.EntryOut.Attr.UID
+	*(*uint32)(unsafe.Pointer(&outPayload[112])) = mkDirOut.EntryOut.Attr.GID
+	*(*uint32)(unsafe.Pointer(&outPayload[116])) = mkDirOut.EntryOut.Attr.RDev
+	*(*uint32)(unsafe.Pointer(&outPayload[120])) = mkDirOut.EntryOut.Attr.BlkSize
+	*(*uint32)(unsafe.Pointer(&outPayload[124])) = mkDirOut.EntryOut.Attr.Padding
+
+	volume.devFuseFDWriter(inHeader, 0, outPayload)
 }
 
 func (volume *volumeStruct) doUnlink(inHeader *InHeader, devFuseFDReadBufPayload []byte) {
@@ -243,7 +386,7 @@ func (volume *volumeStruct) doUnlink(inHeader *InHeader, devFuseFDReadBufPayload
 	)
 
 	unlinkIn = &UnlinkIn{
-		Name: devFuseFDReadBufPayload,
+		Name: cloneByteSlice(devFuseFDReadBufPayload, true),
 	}
 
 	errno = volume.callbacks.DoUnlink(inHeader, unlinkIn)
@@ -258,7 +401,7 @@ func (volume *volumeStruct) doRmDir(inHeader *InHeader, devFuseFDReadBufPayload 
 	)
 
 	rmDirIn = &RmDirIn{
-		Name: devFuseFDReadBufPayload,
+		Name: cloneByteSlice(devFuseFDReadBufPayload, true),
 	}
 
 	errno = volume.callbacks.DoRmDir(inHeader, rmDirIn)
@@ -279,7 +422,7 @@ func (volume *volumeStruct) doRename(inHeader *InHeader, devFuseFDReadBufPayload
 		return
 	}
 
-	oldNameNewNameSplit = bytes.SplitN(devFuseFDReadBufPayload[RenameInFixedPortionSize:], []byte{0}, 1)
+	oldNameNewNameSplit = bytes.SplitN(devFuseFDReadBufPayload[RenameInFixedPortionSize:], []byte{0}, 2)
 	if len(oldNameNewNameSplit) != 2 {
 		volume.logger.Printf("Call to doRename() with bad devFuseFDReadBufPayload")
 		volume.devFuseFDWriter(inHeader, syscall.EINVAL)
@@ -288,8 +431,8 @@ func (volume *volumeStruct) doRename(inHeader *InHeader, devFuseFDReadBufPayload
 
 	renameIn = &RenameIn{
 		NewDir:  *(*uint64)(unsafe.Pointer(&devFuseFDReadBufPayload[0])),
-		OldName: oldNameNewNameSplit[0],
-		NewName: oldNameNewNameSplit[1],
+		OldName: cloneByteSlice(oldNameNewNameSplit[0], false),
+		NewName: cloneByteSlice(oldNameNewNameSplit[1], true),
 	}
 
 	errno = volume.callbacks.DoRename(inHeader, renameIn)
@@ -299,8 +442,10 @@ func (volume *volumeStruct) doRename(inHeader *InHeader, devFuseFDReadBufPayload
 
 func (volume *volumeStruct) doLink(inHeader *InHeader, devFuseFDReadBufPayload []byte) {
 	var (
-		errno  syscall.Errno
-		linkIn *LinkIn
+		errno      syscall.Errno
+		linkIn     *LinkIn
+		linkOut    *LinkOut
+		outPayload []byte
 	)
 
 	if len(devFuseFDReadBufPayload) < LinkInFixedPortionSize {
@@ -311,12 +456,42 @@ func (volume *volumeStruct) doLink(inHeader *InHeader, devFuseFDReadBufPayload [
 
 	linkIn = &LinkIn{
 		OldNodeID: *(*uint64)(unsafe.Pointer(&devFuseFDReadBufPayload[0])),
-		Name:      devFuseFDReadBufPayload[LinkInFixedPortionSize:],
+		Name:      cloneByteSlice(devFuseFDReadBufPayload[LinkInFixedPortionSize:], true),
 	}
 
-	errno = volume.callbacks.DoLink(inHeader, linkIn)
+	linkOut, errno = volume.callbacks.DoLink(inHeader, linkIn)
+	if 0 != errno {
+		volume.devFuseFDWriter(inHeader, errno)
+		return
+	}
 
-	volume.devFuseFDWriter(inHeader, errno)
+	outPayload = make([]byte, LinkOutSize)
+
+	*(*uint64)(unsafe.Pointer(&outPayload[0])) = linkOut.EntryOut.NodeID
+	*(*uint64)(unsafe.Pointer(&outPayload[8])) = linkOut.EntryOut.Generation
+	*(*uint64)(unsafe.Pointer(&outPayload[16])) = linkOut.EntryOut.EntryValidSec
+	*(*uint64)(unsafe.Pointer(&outPayload[24])) = linkOut.EntryOut.AttrValidSec
+	*(*uint32)(unsafe.Pointer(&outPayload[32])) = linkOut.EntryOut.EntryValidNSec
+	*(*uint32)(unsafe.Pointer(&outPayload[36])) = linkOut.EntryOut.AttrValidNSec
+
+	*(*uint64)(unsafe.Pointer(&outPayload[40])) = linkOut.EntryOut.Attr.Ino
+	*(*uint64)(unsafe.Pointer(&outPayload[48])) = linkOut.EntryOut.Attr.Size
+	*(*uint64)(unsafe.Pointer(&outPayload[56])) = linkOut.EntryOut.Attr.Blocks
+	*(*uint64)(unsafe.Pointer(&outPayload[64])) = linkOut.EntryOut.Attr.ATimeSec
+	*(*uint64)(unsafe.Pointer(&outPayload[72])) = linkOut.EntryOut.Attr.MTimeSec
+	*(*uint64)(unsafe.Pointer(&outPayload[80])) = linkOut.EntryOut.Attr.CTimeSec
+	*(*uint32)(unsafe.Pointer(&outPayload[88])) = linkOut.EntryOut.Attr.ATimeNSec
+	*(*uint32)(unsafe.Pointer(&outPayload[92])) = linkOut.EntryOut.Attr.MTimeNSec
+	*(*uint32)(unsafe.Pointer(&outPayload[96])) = linkOut.EntryOut.Attr.CTimeNSec
+	*(*uint32)(unsafe.Pointer(&outPayload[100])) = linkOut.EntryOut.Attr.Mode
+	*(*uint32)(unsafe.Pointer(&outPayload[104])) = linkOut.EntryOut.Attr.NLink
+	*(*uint32)(unsafe.Pointer(&outPayload[108])) = linkOut.EntryOut.Attr.UID
+	*(*uint32)(unsafe.Pointer(&outPayload[112])) = linkOut.EntryOut.Attr.GID
+	*(*uint32)(unsafe.Pointer(&outPayload[116])) = linkOut.EntryOut.Attr.RDev
+	*(*uint32)(unsafe.Pointer(&outPayload[120])) = linkOut.EntryOut.Attr.BlkSize
+	*(*uint32)(unsafe.Pointer(&outPayload[124])) = linkOut.EntryOut.Attr.Padding
+
+	volume.devFuseFDWriter(inHeader, 0, outPayload)
 }
 
 func (volume *volumeStruct) doOpen(inHeader *InHeader, devFuseFDReadBufPayload []byte) {
@@ -410,7 +585,7 @@ func (volume *volumeStruct) doWrite(inHeader *InHeader, devFuseFDReadBufPayload 
 		LockOwner:  *(*uint64)(unsafe.Pointer(&devFuseFDReadBufPayload[24])),
 		Flags:      *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[32])),
 		Padding:    *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[36])),
-		Data:       devFuseFDReadBufPayload[WriteInFixedPortionSize:],
+		Data:       cloneByteSlice(devFuseFDReadBufPayload[WriteInFixedPortionSize:], false),
 	}
 
 	if len(writeIn.Data) != int(writeIn.Size) {
@@ -531,7 +706,7 @@ func (volume *volumeStruct) doSetXAttr(inHeader *InHeader, devFuseFDReadBufPaylo
 		return
 	}
 
-	nameDataSplit = bytes.SplitN(devFuseFDReadBufPayload[SetXAttrInFixedPortionSize:], []byte{0}, 1)
+	nameDataSplit = bytes.SplitN(devFuseFDReadBufPayload[SetXAttrInFixedPortionSize:], []byte{0}, 2)
 	if len(nameDataSplit) != 2 {
 		volume.logger.Printf("Call to doSetXAttr() with bad devFuseFDReadBufPayload")
 		volume.devFuseFDWriter(inHeader, syscall.EINVAL)
@@ -541,8 +716,8 @@ func (volume *volumeStruct) doSetXAttr(inHeader *InHeader, devFuseFDReadBufPaylo
 	setXAttrIn = &SetXAttrIn{
 		Size:  *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[0])),
 		Flags: *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[4])),
-		Name:  nameDataSplit[0],
-		Data:  nameDataSplit[1],
+		Name:  cloneByteSlice(nameDataSplit[0], false),
+		Data:  cloneByteSlice(nameDataSplit[1], true),
 	}
 
 	setXAttrInSize = SetXAttrInFixedPortionSize + len(setXAttrIn.Name) + 1 + len(setXAttrIn.Data)
@@ -575,7 +750,7 @@ func (volume *volumeStruct) doGetXAttr(inHeader *InHeader, devFuseFDReadBufPaylo
 	getXAttrIn = &GetXAttrIn{
 		Size:    *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[0])),
 		Padding: *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[4])),
-		Name:    devFuseFDReadBufPayload[GetXAttrInFixedPortionSize:],
+		Name:    cloneByteSlice(devFuseFDReadBufPayload[GetXAttrInFixedPortionSize:], true),
 	}
 
 	getXAttrOut, errno = volume.callbacks.DoGetXAttr(inHeader, getXAttrIn)
@@ -584,12 +759,14 @@ func (volume *volumeStruct) doGetXAttr(inHeader *InHeader, devFuseFDReadBufPaylo
 		return
 	}
 
-	outPayload = make([]byte, GetXAttrOutFixedPortionSize+len(getXAttrOut.Data))
+	if 0 == getXAttrIn.Size {
+		outPayload = make([]byte, GetXAttrOutSizeOnlySize)
 
-	*(*uint32)(unsafe.Pointer(&outPayload[0])) = uint32(len(getXAttrOut.Data))
-	*(*uint32)(unsafe.Pointer(&outPayload[4])) = getXAttrOut.Padding
-
-	copy(outPayload[GetXAttrOutFixedPortionSize:], getXAttrOut.Data)
+		*(*uint32)(unsafe.Pointer(&outPayload[0])) = getXAttrOut.Size
+		*(*uint32)(unsafe.Pointer(&outPayload[4])) = getXAttrOut.Padding
+	} else {
+		outPayload = getXAttrOut.Data
+	}
 
 	volume.devFuseFDWriter(inHeader, 0, outPayload)
 }
@@ -600,7 +777,6 @@ func (volume *volumeStruct) doListXAttr(inHeader *InHeader, devFuseFDReadBufPayl
 		listXAttrIn      *ListXAttrIn
 		listXAttrOut     *ListXAttrOut
 		nameElement      []byte
-		nameElementIndex int
 		nameTotalLen     uint32
 		outPayload       []byte
 		outPayloadOffset uint32
@@ -623,32 +799,28 @@ func (volume *volumeStruct) doListXAttr(inHeader *InHeader, devFuseFDReadBufPayl
 		return
 	}
 
-	if 0 == len(listXAttrOut.Name) {
-		nameTotalLen = 0
+	if 0 == listXAttrIn.Size {
+		outPayload = make([]byte, ListXAttrOutSizeOnlySize)
+
+		*(*uint32)(unsafe.Pointer(&outPayload[0])) = listXAttrOut.Size
+		*(*uint32)(unsafe.Pointer(&outPayload[4])) = listXAttrOut.Padding
 	} else {
-		nameTotalLen = uint32(len(listXAttrOut.Name)) - 1
+		nameTotalLen = 0
+
+		if 0 != len(listXAttrOut.Name) {
+			for _, nameElement = range listXAttrOut.Name {
+				nameTotalLen += uint32(len(nameElement) + 1)
+			}
+		}
+
+		outPayload = make([]byte, nameTotalLen)
+
+		outPayloadOffset = 0
 
 		for _, nameElement = range listXAttrOut.Name {
-			nameTotalLen += uint32(len(nameElement))
-		}
-	}
-
-	outPayload = make([]byte, ListXAttrOutFixedPortionSize+nameTotalLen)
-
-	*(*uint32)(unsafe.Pointer(&outPayload[0])) = nameTotalLen
-	*(*uint32)(unsafe.Pointer(&outPayload[4])) = listXAttrOut.Padding
-
-	if 0 != len(listXAttrOut.Name) {
-		outPayloadOffset = ListXAttrOutFixedPortionSize
-
-		for nameElementIndex, nameElement = range listXAttrOut.Name {
-			if 0 != nameElementIndex {
-				outPayload[outPayloadOffset] = 0
-				outPayloadOffset++
-			}
-
 			copy(outPayload[outPayloadOffset:], nameElement)
-			outPayloadOffset += uint32(len(nameElement))
+			outPayloadOffset += uint32(len(nameElement) + 1)
+			outPayload[outPayloadOffset-1] = 0
 		}
 	}
 
@@ -662,7 +834,7 @@ func (volume *volumeStruct) doRemoveXAttr(inHeader *InHeader, devFuseFDReadBufPa
 	)
 
 	removeXAttrIn = &RemoveXAttrIn{
-		Name: devFuseFDReadBufPayload[GetXAttrInFixedPortionSize:],
+		Name: cloneByteSlice(devFuseFDReadBufPayload, true),
 	}
 
 	errno = volume.callbacks.DoRemoveXAttr(inHeader, removeXAttrIn)
@@ -932,10 +1104,10 @@ func (volume *volumeStruct) doGetLK(inHeader *InHeader, devFuseFDReadBufPayload 
 
 	outPayload = make([]byte, GetLKOutSize)
 
-	*(*uint64)(unsafe.Pointer(&outPayload[0])) = getLKOut.Start
-	*(*uint64)(unsafe.Pointer(&outPayload[8])) = getLKOut.End
-	*(*uint32)(unsafe.Pointer(&outPayload[16])) = getLKOut.Type
-	*(*uint32)(unsafe.Pointer(&outPayload[20])) = getLKOut.PID
+	*(*uint64)(unsafe.Pointer(&outPayload[0])) = getLKOut.FileLock.Start
+	*(*uint64)(unsafe.Pointer(&outPayload[8])) = getLKOut.FileLock.End
+	*(*uint32)(unsafe.Pointer(&outPayload[16])) = getLKOut.FileLock.Type
+	*(*uint32)(unsafe.Pointer(&outPayload[20])) = getLKOut.FileLock.PID
 
 	volume.devFuseFDWriter(inHeader, 0, outPayload)
 }
@@ -1041,7 +1213,7 @@ func (volume *volumeStruct) doCreate(inHeader *InHeader, devFuseFDReadBufPayload
 		Mode:    *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[4])),
 		UMask:   *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[8])),
 		Padding: *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[12])),
-		Name:    devFuseFDReadBufPayload[CreateInFixedPortionSize:],
+		Name:    cloneByteSlice(devFuseFDReadBufPayload[CreateInFixedPortionSize:], true),
 	}
 
 	createOut, errno = volume.callbacks.DoCreate(inHeader, createIn)
@@ -1052,9 +1224,33 @@ func (volume *volumeStruct) doCreate(inHeader *InHeader, devFuseFDReadBufPayload
 
 	outPayload = make([]byte, CreateOutSize)
 
-	*(*uint64)(unsafe.Pointer(&outPayload[0])) = createOut.FH
-	*(*uint32)(unsafe.Pointer(&outPayload[8])) = createOut.OpenFlags
-	*(*uint32)(unsafe.Pointer(&outPayload[12])) = createOut.Padding
+	*(*uint64)(unsafe.Pointer(&outPayload[0])) = createOut.EntryOut.NodeID
+	*(*uint64)(unsafe.Pointer(&outPayload[8])) = createOut.EntryOut.Generation
+	*(*uint64)(unsafe.Pointer(&outPayload[16])) = createOut.EntryOut.EntryValidSec
+	*(*uint64)(unsafe.Pointer(&outPayload[24])) = createOut.EntryOut.AttrValidSec
+	*(*uint32)(unsafe.Pointer(&outPayload[32])) = createOut.EntryOut.EntryValidNSec
+	*(*uint32)(unsafe.Pointer(&outPayload[36])) = createOut.EntryOut.AttrValidNSec
+
+	*(*uint64)(unsafe.Pointer(&outPayload[40])) = createOut.EntryOut.Attr.Ino
+	*(*uint64)(unsafe.Pointer(&outPayload[48])) = createOut.EntryOut.Attr.Size
+	*(*uint64)(unsafe.Pointer(&outPayload[56])) = createOut.EntryOut.Attr.Blocks
+	*(*uint64)(unsafe.Pointer(&outPayload[64])) = createOut.EntryOut.Attr.ATimeSec
+	*(*uint64)(unsafe.Pointer(&outPayload[72])) = createOut.EntryOut.Attr.MTimeSec
+	*(*uint64)(unsafe.Pointer(&outPayload[80])) = createOut.EntryOut.Attr.CTimeSec
+	*(*uint32)(unsafe.Pointer(&outPayload[88])) = createOut.EntryOut.Attr.ATimeNSec
+	*(*uint32)(unsafe.Pointer(&outPayload[92])) = createOut.EntryOut.Attr.MTimeNSec
+	*(*uint32)(unsafe.Pointer(&outPayload[96])) = createOut.EntryOut.Attr.CTimeNSec
+	*(*uint32)(unsafe.Pointer(&outPayload[100])) = createOut.EntryOut.Attr.Mode
+	*(*uint32)(unsafe.Pointer(&outPayload[104])) = createOut.EntryOut.Attr.NLink
+	*(*uint32)(unsafe.Pointer(&outPayload[108])) = createOut.EntryOut.Attr.UID
+	*(*uint32)(unsafe.Pointer(&outPayload[112])) = createOut.EntryOut.Attr.GID
+	*(*uint32)(unsafe.Pointer(&outPayload[116])) = createOut.EntryOut.Attr.RDev
+	*(*uint32)(unsafe.Pointer(&outPayload[120])) = createOut.EntryOut.Attr.BlkSize
+	*(*uint32)(unsafe.Pointer(&outPayload[124])) = createOut.EntryOut.Attr.Padding
+
+	*(*uint64)(unsafe.Pointer(&outPayload[128])) = createOut.FH
+	*(*uint32)(unsafe.Pointer(&outPayload[136])) = createOut.OpenFlags
+	*(*uint32)(unsafe.Pointer(&outPayload[140])) = createOut.Padding
 
 	volume.devFuseFDWriter(inHeader, 0, outPayload)
 }
@@ -1114,19 +1310,13 @@ func (volume *volumeStruct) doBMap(inHeader *InHeader, devFuseFDReadBufPayload [
 }
 
 func (volume *volumeStruct) doDestroy(inHeader *InHeader, devFuseFDReadBufPayload []byte) {
-	var (
-		errno syscall.Errno
-	)
-
 	if len(devFuseFDReadBufPayload) != 0 {
 		volume.logger.Printf("Call to doDestroy() with bad len(devFuseFDReadBufPayload) == %v", len(devFuseFDReadBufPayload))
 		volume.devFuseFDWriter(inHeader, syscall.EINVAL)
 		return
 	}
 
-	errno = volume.callbacks.DoDestroy(inHeader)
-
-	volume.devFuseFDWriter(inHeader, errno)
+	volume.callbacks.DoDestroy(inHeader)
 }
 
 func (volume *volumeStruct) doPoll(inHeader *InHeader, devFuseFDReadBufPayload []byte) {
@@ -1289,44 +1479,44 @@ func (volume *volumeStruct) doReadDirPlus(inHeader *InHeader, devFuseFDReadBufPa
 			return
 		}
 
-		*(*uint64)(unsafe.Pointer(&outPayload[outPayloadOffset+0])) = dirEntPlus.NodeID
-		*(*uint64)(unsafe.Pointer(&outPayload[outPayloadOffset+8])) = dirEntPlus.Generation
-		*(*uint64)(unsafe.Pointer(&outPayload[outPayloadOffset+16])) = dirEntPlus.EntryValidSec
-		*(*uint64)(unsafe.Pointer(&outPayload[outPayloadOffset+24])) = dirEntPlus.AttrValidSec
-		*(*uint32)(unsafe.Pointer(&outPayload[outPayloadOffset+32])) = dirEntPlus.EntryValidNSec
-		*(*uint32)(unsafe.Pointer(&outPayload[outPayloadOffset+36])) = dirEntPlus.AttrValidNSec
+		*(*uint64)(unsafe.Pointer(&outPayload[outPayloadOffset+0])) = dirEntPlus.EntryOut.NodeID
+		*(*uint64)(unsafe.Pointer(&outPayload[outPayloadOffset+8])) = dirEntPlus.EntryOut.Generation
+		*(*uint64)(unsafe.Pointer(&outPayload[outPayloadOffset+16])) = dirEntPlus.EntryOut.EntryValidSec
+		*(*uint64)(unsafe.Pointer(&outPayload[outPayloadOffset+24])) = dirEntPlus.EntryOut.AttrValidSec
+		*(*uint32)(unsafe.Pointer(&outPayload[outPayloadOffset+32])) = dirEntPlus.EntryOut.EntryValidNSec
+		*(*uint32)(unsafe.Pointer(&outPayload[outPayloadOffset+36])) = dirEntPlus.EntryOut.AttrValidNSec
 
-		*(*uint64)(unsafe.Pointer(&outPayload[outPayloadOffset+40])) = dirEntPlus.Ino
-		*(*uint64)(unsafe.Pointer(&outPayload[outPayloadOffset+48])) = dirEntPlus.Size
-		*(*uint64)(unsafe.Pointer(&outPayload[outPayloadOffset+56])) = dirEntPlus.Blocks
-		*(*uint64)(unsafe.Pointer(&outPayload[outPayloadOffset+64])) = dirEntPlus.ATimeSec
-		*(*uint64)(unsafe.Pointer(&outPayload[outPayloadOffset+72])) = dirEntPlus.MTimeSec
-		*(*uint64)(unsafe.Pointer(&outPayload[outPayloadOffset+80])) = dirEntPlus.CTimeSec
-		*(*uint32)(unsafe.Pointer(&outPayload[outPayloadOffset+88])) = dirEntPlus.ATimeNSec
-		*(*uint32)(unsafe.Pointer(&outPayload[outPayloadOffset+92])) = dirEntPlus.MTimeNSec
-		*(*uint32)(unsafe.Pointer(&outPayload[outPayloadOffset+96])) = dirEntPlus.CTimeNSec
-		*(*uint32)(unsafe.Pointer(&outPayload[outPayloadOffset+100])) = dirEntPlus.Mode
-		*(*uint32)(unsafe.Pointer(&outPayload[outPayloadOffset+104])) = dirEntPlus.NLink
-		*(*uint32)(unsafe.Pointer(&outPayload[outPayloadOffset+108])) = dirEntPlus.UID
-		*(*uint32)(unsafe.Pointer(&outPayload[outPayloadOffset+112])) = dirEntPlus.GID
-		*(*uint32)(unsafe.Pointer(&outPayload[outPayloadOffset+116])) = dirEntPlus.RDev
-		*(*uint32)(unsafe.Pointer(&outPayload[outPayloadOffset+120])) = dirEntPlus.BlkSize
-		*(*uint32)(unsafe.Pointer(&outPayload[outPayloadOffset+124])) = dirEntPlus.Padding
+		*(*uint64)(unsafe.Pointer(&outPayload[outPayloadOffset+40])) = dirEntPlus.EntryOut.Attr.Ino
+		*(*uint64)(unsafe.Pointer(&outPayload[outPayloadOffset+48])) = dirEntPlus.EntryOut.Attr.Size
+		*(*uint64)(unsafe.Pointer(&outPayload[outPayloadOffset+56])) = dirEntPlus.EntryOut.Attr.Blocks
+		*(*uint64)(unsafe.Pointer(&outPayload[outPayloadOffset+64])) = dirEntPlus.EntryOut.Attr.ATimeSec
+		*(*uint64)(unsafe.Pointer(&outPayload[outPayloadOffset+72])) = dirEntPlus.EntryOut.Attr.MTimeSec
+		*(*uint64)(unsafe.Pointer(&outPayload[outPayloadOffset+80])) = dirEntPlus.EntryOut.Attr.CTimeSec
+		*(*uint32)(unsafe.Pointer(&outPayload[outPayloadOffset+88])) = dirEntPlus.EntryOut.Attr.ATimeNSec
+		*(*uint32)(unsafe.Pointer(&outPayload[outPayloadOffset+92])) = dirEntPlus.EntryOut.Attr.MTimeNSec
+		*(*uint32)(unsafe.Pointer(&outPayload[outPayloadOffset+96])) = dirEntPlus.EntryOut.Attr.CTimeNSec
+		*(*uint32)(unsafe.Pointer(&outPayload[outPayloadOffset+100])) = dirEntPlus.EntryOut.Attr.Mode
+		*(*uint32)(unsafe.Pointer(&outPayload[outPayloadOffset+104])) = dirEntPlus.EntryOut.Attr.NLink
+		*(*uint32)(unsafe.Pointer(&outPayload[outPayloadOffset+108])) = dirEntPlus.EntryOut.Attr.UID
+		*(*uint32)(unsafe.Pointer(&outPayload[outPayloadOffset+112])) = dirEntPlus.EntryOut.Attr.GID
+		*(*uint32)(unsafe.Pointer(&outPayload[outPayloadOffset+116])) = dirEntPlus.EntryOut.Attr.RDev
+		*(*uint32)(unsafe.Pointer(&outPayload[outPayloadOffset+120])) = dirEntPlus.EntryOut.Attr.BlkSize
+		*(*uint32)(unsafe.Pointer(&outPayload[outPayloadOffset+124])) = dirEntPlus.EntryOut.Attr.Padding
 
 		outPayloadOffset += EntryOutSize
 
-		*(*uint64)(unsafe.Pointer(&outPayload[outPayloadOffset+0])) = dirEntPlus.Ino
-		*(*uint64)(unsafe.Pointer(&outPayload[outPayloadOffset+8])) = dirEntPlus.Off
-		*(*uint32)(unsafe.Pointer(&outPayload[outPayloadOffset+16])) = uint32(len(dirEntPlus.Name))
-		*(*uint32)(unsafe.Pointer(&outPayload[outPayloadOffset+20])) = dirEntPlus.Type
+		*(*uint64)(unsafe.Pointer(&outPayload[outPayloadOffset+0])) = dirEntPlus.DirEnt.Ino
+		*(*uint64)(unsafe.Pointer(&outPayload[outPayloadOffset+8])) = dirEntPlus.DirEnt.Off
+		*(*uint32)(unsafe.Pointer(&outPayload[outPayloadOffset+16])) = uint32(len(dirEntPlus.DirEnt.Name))
+		*(*uint32)(unsafe.Pointer(&outPayload[outPayloadOffset+20])) = dirEntPlus.DirEnt.Type
 
 		outPayloadOffset += DirEntFixedPortionSize
 
-		copy(outPayload[outPayloadOffset:], dirEntPlus.Name)
+		copy(outPayload[outPayloadOffset:], dirEntPlus.DirEnt.Name)
 
-		outPayloadOffset += uint32(len(dirEntPlus.Name))
+		outPayloadOffset += uint32(len(dirEntPlus.DirEnt.Name))
 
-		for paddingIndex = uint32(len(dirEntPlus.Name)); paddingIndex < nameLenAligned; paddingIndex++ {
+		for paddingIndex = uint32(len(dirEntPlus.DirEnt.Name)); paddingIndex < nameLenAligned; paddingIndex++ {
 			outPayload[outPayloadOffset] = 0
 			outPayloadOffset++
 		}
@@ -1350,7 +1540,7 @@ func (volume *volumeStruct) doRename2(inHeader *InHeader, devFuseFDReadBufPayloa
 		return
 	}
 
-	oldNameNewNameSplit = bytes.SplitN(devFuseFDReadBufPayload[Rename2InFixedPortionSize:], []byte{0}, 1)
+	oldNameNewNameSplit = bytes.SplitN(devFuseFDReadBufPayload[Rename2InFixedPortionSize:], []byte{0}, 2)
 	if len(oldNameNewNameSplit) != 2 {
 		volume.logger.Printf("Call to doRename2() with bad devFuseFDReadBufPayload")
 		volume.devFuseFDWriter(inHeader, syscall.EINVAL)
@@ -1361,8 +1551,8 @@ func (volume *volumeStruct) doRename2(inHeader *InHeader, devFuseFDReadBufPayloa
 		NewDir:  *(*uint64)(unsafe.Pointer(&devFuseFDReadBufPayload[0])),
 		Flags:   *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[8])),
 		Padding: *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[12])),
-		OldName: oldNameNewNameSplit[0],
-		NewName: oldNameNewNameSplit[1],
+		OldName: cloneByteSlice(oldNameNewNameSplit[0], false),
+		NewName: cloneByteSlice(oldNameNewNameSplit[1], true),
 	}
 
 	errno = volume.callbacks.DoRename2(inHeader, rename2In)
