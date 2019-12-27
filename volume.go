@@ -269,6 +269,8 @@ func (volume *volumeStruct) processDevFuseFDReadBuf(devFuseFDReadBuf []byte) {
 		volume.doBMap(inHeader, devFuseFDReadBuf[InHeaderSize:])
 	case OpCodeDestroy:
 		volume.doDestroy(inHeader, devFuseFDReadBuf[InHeaderSize:])
+	case OpCodeIoCtl:
+		volume.devFuseFDWriter(inHeader, syscall.EINVAL)
 	case OpCodePoll:
 		volume.doPoll(inHeader, devFuseFDReadBuf[InHeaderSize:])
 	case OpCodeBatchForget:
