@@ -146,6 +146,8 @@ func (volume *volumeStruct) DoMount() (err error) {
 		return
 	}
 
+	volume.logger.Printf("Volume %s mounted on mountpoint %s", volume.volumeName, volume.mountpointDirPath)
+
 	err = nil
 	return
 }
