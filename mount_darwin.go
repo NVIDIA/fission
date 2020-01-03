@@ -3,6 +3,7 @@ package fission
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"strconv"
 	"syscall"
 )
@@ -16,9 +17,15 @@ const (
 
 func (volume *volumeStruct) DoMount() (err error) {
 	var (
-		devOsxFuseIndex uint64
-		devOsxFusePath  string
+		devOsxFuseIndex              uint64
+		devOsxFusePath               string
+		osxFuseLoadCmd               *exec.Cmd
+		osxFuseLoadCmdCombinedOutput []byte
+		errAsPathError               *os.PathError
+		errAsPathErrorOK             bool
 	)
+
+	// Ensure OSXFuse is installed
 
 	_, err = os.Stat(osxFuseLoadPath)
 	if nil != err {
@@ -31,27 +38,60 @@ func (volume *volumeStruct) DoMount() (err error) {
 		return
 	}
 
+	// Try to open one of the devOsxFusePrefix* files (only there when OSXFuse has been loaded)
+
 	devOsxFuseIndex = 0
 
-	for devOsxFuseIndex = 64; ; devOsxFuseIndex++ {
+	for devOsxFuseIndex = 0; ; devOsxFuseIndex++ {
 		devOsxFusePath = devOsxFusePrefix + strconv.FormatUint(devOsxFuseIndex, 10)
 
 		volume.devFuseFD, err = syscall.Open(devOsxFusePath, syscall.O_RDWR|syscall.O_CLOEXEC, 0)
-		if nil != err {
-			fmt.Printf("UNDO: failed opening devOsxFusePath (\"%s\"): %v\n", devOsxFusePath, err)
-			if os.IsNotExist(err) {
-				fmt.Println("...os.IsNotExist(err) == true")
-			} else {
-				fmt.Println("...os.IsNotExist(err) == false")
+
+		// Handle special case where OSXFuse is not yet loaded
+
+		if (0 == devOsxFuseIndex) && (nil != err) && os.IsNotExist(err) {
+			fmt.Println("UNDO: Hey... time to load OSXFuse :-)")
+			osxFuseLoadCmd = exec.Command(osxFuseLoadPath)
+			osxFuseLoadCmd.Dir = "/" // Not sure if this is necessary
+
+			osxFuseLoadCmdCombinedOutput, err = osxFuseLoadCmd.CombinedOutput()
+			if nil != err {
+				volume.logger.Printf("DoMount() unable to load OSXFuse via osxFuseLoadPath (\"%s\") [%v]: %s", osxFuseLoadPath, err, string(osxFuseLoadCmdCombinedOutput[:]))
+				return
 			}
+
+			// Now reattempt to open devOsxFusePrefix + "0" before falling into the common logic
+
+			volume.devFuseFD, err = syscall.Open(devOsxFusePath, syscall.O_RDWR|syscall.O_CLOEXEC, 0)
+		}
+
+		if nil == err {
+			// Got one - proceed to mount phase
 			break
 		}
 
-		fmt.Printf("UNDO: success opening devOsxFusePath (\"%s\")\n", devOsxFusePath)
-		break // UNDO
+		if os.IsNotExist(err) {
+			volume.logger.Printf("DoMount() unable to find available FUSE device file among devOsxFusePrefix* (%s*)", devOsxFusePrefix)
+			return
+		}
+
+		errAsPathError, errAsPathErrorOK = err.(*os.PathError)
+
+		if errAsPathErrorOK {
+			if syscall.EBUSY == errAsPathError.Err {
+				// This one is busy - proceed to the next one
+				continue
+			}
+
+			volume.logger.Printf("DoMount() open of \"%s\" got unexpeced errAsPathError: %+v", devOsxFusePath, errAsPathError)
+			return
+		}
+
+		volume.logger.Printf("DoMount() open of \"%s\" got unexpected error: %v", devOsxFusePath, err)
+		return
 	}
 
-	err = fmt.Errorf("TODO: DoMount()")
+	err = fmt.Errorf("TODO: Continue DoMount() for devOsxFusePath: %s", devOsxFusePath)
 	return
 }
 
