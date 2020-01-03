@@ -2,9 +2,55 @@ package fission
 
 import (
 	"fmt"
+	"os"
+	"strconv"
+	"syscall"
+)
+
+const (
+	devOsxFusePrefix     = "/dev/osxfuse" // suffix is a non-negative decimal number starting with 0, 1, ...
+	osxFuseLoadPath      = "/Library/Filesystems/osxfuse.fs/Contents/Resources/load_osxfuse"
+	osxFuseMountPath     = "/Library/Filesystems/osxfuse.fs/Contents/Resources/mount_osxfuse"
+	osxFuseDaemonPathEnv = "MOUNT_OSXFUSE_DAEMON_PATH"
 )
 
 func (volume *volumeStruct) DoMount() (err error) {
+	var (
+		devOsxFuseIndex uint64
+		devOsxFusePath  string
+	)
+
+	_, err = os.Stat(osxFuseLoadPath)
+	if nil != err {
+		volume.logger.Printf("DoMount() unable to find osxFuseLoadPath (\"%s\"): %v", osxFuseLoadPath, err)
+		return
+	}
+	_, err = os.Stat(osxFuseMountPath)
+	if nil != err {
+		volume.logger.Printf("DoMount() unable to find osxFuseMountPath (\"%s\"): %v", osxFuseMountPath, err)
+		return
+	}
+
+	devOsxFuseIndex = 0
+
+	for devOsxFuseIndex = 64; ; devOsxFuseIndex++ {
+		devOsxFusePath = devOsxFusePrefix + strconv.FormatUint(devOsxFuseIndex, 10)
+
+		volume.devFuseFD, err = syscall.Open(devOsxFusePath, syscall.O_RDWR|syscall.O_CLOEXEC, 0)
+		if nil != err {
+			fmt.Printf("UNDO: failed opening devOsxFusePath (\"%s\"): %v\n", devOsxFusePath, err)
+			if os.IsNotExist(err) {
+				fmt.Println("...os.IsNotExist(err) == true")
+			} else {
+				fmt.Println("...os.IsNotExist(err) == false")
+			}
+			break
+		}
+
+		fmt.Printf("UNDO: success opening devOsxFusePath (\"%s\")\n", devOsxFusePath)
+		break // UNDO
+	}
+
 	err = fmt.Errorf("TODO: DoMount()")
 	return
 }
