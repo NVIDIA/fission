@@ -1170,13 +1170,19 @@ func (volume *volumeStruct) doBMap(inHeader *InHeader, devFuseFDReadBufPayload [
 }
 
 func (volume *volumeStruct) doDestroy(inHeader *InHeader, devFuseFDReadBufPayload []byte) {
+	var (
+		errno syscall.Errno
+	)
+
 	if len(devFuseFDReadBufPayload) != 0 {
 		volume.logger.Printf("Call to doDestroy() with bad len(devFuseFDReadBufPayload) == %v", len(devFuseFDReadBufPayload))
 		volume.devFuseFDWriter(inHeader, syscall.EINVAL)
 		return
 	}
 
-	volume.callbacks.DoDestroy(inHeader)
+	errno = volume.callbacks.DoDestroy(inHeader)
+
+	volume.devFuseFDWriter(inHeader, errno)
 }
 
 func (volume *volumeStruct) doPoll(inHeader *InHeader, devFuseFDReadBufPayload []byte) {

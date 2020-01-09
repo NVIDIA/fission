@@ -73,7 +73,7 @@ type Callbacks interface {
 	DoCreate(inHeader *InHeader, createIn *CreateIn) (createOut *CreateOut, errno syscall.Errno)
 	DoInterrupt(inHeader *InHeader, interruptIn *InterruptIn)
 	DoBMap(inHeader *InHeader, bMapIn *BMapIn) (bMapOut *BMapOut, errno syscall.Errno)
-	DoDestroy(inHeader *InHeader)
+	DoDestroy(inHeader *InHeader) (errno syscall.Errno)
 	DoPoll(inHeader *InHeader, pollIn *PollIn) (pollOut *PollOut, errno syscall.Errno)
 	DoBatchForget(inHeader *InHeader, batchForgetIn *BatchForgetIn)
 	DoFAllocate(inHeader *InHeader, fAllocateIn *FAllocateIn) (errno syscall.Errno)

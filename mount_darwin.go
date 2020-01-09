@@ -1,7 +1,6 @@
 package fission
 
 import (
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -75,11 +74,9 @@ func (volume *volumeStruct) DoMount() (err error) {
 	for _, devOsxFusePath = range devOsxFusePathList {
 		volume.devFuseFD, err = syscall.Open(devOsxFusePath, syscall.O_RDWR|syscall.O_CLOEXEC, 0)
 		if nil != err {
-			fmt.Printf("UNDO: DoMount() Open(%s,,) failed: %v\n", devOsxFusePath, err)
 			// Not this one... must be busy
 			continue
 		}
-		fmt.Printf("UNDO: DoMount() Open(%s,,) succeeded\n", devOsxFusePath)
 
 		// Mount via this FUSE device file using Mount Helper (fusermount equivalent)
 
