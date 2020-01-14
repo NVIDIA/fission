@@ -18,6 +18,8 @@ import (
 )
 
 const (
+	fuseSubtype = "fission-ramfs"
+
 	mountFlags = uintptr(0)
 
 	initOutFlagsMask            = fission.InitFlagsAsyncRead | fission.InitFlagsBigWrites | fission.InitFlagsDontMask | fission.InitFlagsAutoInvalData | fission.InitFlagsDoReadDirPlus
@@ -167,7 +169,7 @@ func main() {
 	globals.fhMap = make(map[uint64]uint64)
 	globals.lastFH = uint64(0)
 
-	globals.volume = fission.NewVolume(globals.volumeName, globals.mountPoint, mountFlags, initOutMaxWrite, &globals, globals.logger, globals.errChan)
+	globals.volume = fission.NewVolume(globals.volumeName, globals.mountPoint, fuseSubtype, mountFlags, initOutMaxWrite, &globals, globals.logger, globals.errChan)
 
 	err = globals.volume.DoMount()
 	if nil != err {

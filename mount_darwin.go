@@ -1,10 +1,10 @@
 package fission
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"syscall"
 )
 
@@ -21,6 +21,8 @@ func (volume *volumeStruct) DoMount() (err error) {
 	var (
 		devOsxFusePath                string
 		devOsxFusePathList            []string
+		iosizeMountOption             string
+		mountOptions                  string
 		osxFuseLoadCmd                *exec.Cmd
 		osxFuseLoadCmdCombinedOutput  []byte
 		osxFuseMountCmd               *exec.Cmd
@@ -69,6 +71,12 @@ func (volume *volumeStruct) DoMount() (err error) {
 		}
 	}
 
+	// Compute mountOptions
+
+	iosizeMountOption = fmt.Sprintf("iosize=%d", volume.initOutMaxWrite)
+
+	mountOptions = iosizeMountOption
+
 	// Find an available FUSE device file
 
 	for _, devOsxFusePath = range devOsxFusePathList {
@@ -86,7 +94,8 @@ func (volume *volumeStruct) DoMount() (err error) {
 		osxFuseMountCmd = &exec.Cmd{
 			Path: osxFuseMountPath,
 			Args: []string{
-				"-o iosize=" + strconv.FormatUint(uint64(volume.initOutMaxWrite), 10),
+				osxFuseMountPath,
+				"-o", mountOptions,
 				"3",
 				volume.mountpointDirPath,
 			},
