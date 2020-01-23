@@ -72,10 +72,12 @@ func unmarshalSetXAttrIn(devFuseFDReadBufPayload []byte) (setXAttrIn *SetXAttrIn
 	}
 
 	setXAttrIn = &SetXAttrIn{
-		Size:  *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[0])),
-		Flags: *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[4])),
-		Name:  cloneByteSlice(nameDataSplit[0], false),
-		Data:  cloneByteSlice(nameDataSplit[1], true),
+		Size:     *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[0])),
+		Flags:    *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[4])),
+		Position: 0,
+		Padding:  0,
+		Name:     cloneByteSlice(nameDataSplit[0], false),
+		Data:     cloneByteSlice(nameDataSplit[1], true),
 	}
 
 	setXAttrInSize = SetXAttrInFixedPortionSize + len(setXAttrIn.Name) + 1 + len(setXAttrIn.Data)
@@ -96,9 +98,11 @@ func unmarshalGetXAttrIn(devFuseFDReadBufPayload []byte) (getXAttrIn *GetXAttrIn
 	}
 
 	getXAttrIn = &GetXAttrIn{
-		Size:    *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[0])),
-		Padding: *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[4])),
-		Name:    cloneByteSlice(devFuseFDReadBufPayload[GetXAttrInFixedPortionSize:], true),
+		Size:     *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[0])),
+		Padding:  *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[4])),
+		Position: 0,
+		Padding2: 0,
+		Name:     cloneByteSlice(devFuseFDReadBufPayload[GetXAttrInFixedPortionSize:], true),
 	}
 
 	err = nil
