@@ -13,7 +13,6 @@ const (
 	osxFuseLoadPath       = "/Library/Filesystems/osxfuse.fs/Contents/Resources/load_osxfuse"
 	osxFuseMountPath      = "/Library/Filesystems/osxfuse.fs/Contents/Resources/mount_osxfuse"
 	osxFuseMountCallByEnv = "MOUNT_OSXFUSE_CALL_BY_LIB=" // No value should be appended
-	osxFuseMountCommFDEnv = "_FUSE_COMMFD=3"             // References first (only) element of osxFuseMountCmd.ExtraFiles
 	osxFuseDaemonPathEnv  = "MOUNT_OSXFUSE_DAEMON_PATH=" // Append program name (os.Args[0])
 )
 
@@ -96,10 +95,10 @@ func (volume *volumeStruct) DoMount() (err error) {
 			Args: []string{
 				osxFuseMountPath,
 				"-o", mountOptions,
-				"3",
+				"3", // First ExtraFiles should be an *os.File of volume.devFuseFD
 				volume.mountpointDirPath,
 			},
-			Env:          append(os.Environ(), osxFuseMountCallByEnv, osxFuseMountCommFDEnv, osxFuseDaemonPathEnv+os.Args[0]),
+			Env:          append(os.Environ(), osxFuseMountCallByEnv, osxFuseDaemonPathEnv+os.Args[0]),
 			Dir:          "",
 			Stdin:        nil,
 			Stdout:       nil, // This will be redirected to osxFuseMountCmdCombinedOutput below
