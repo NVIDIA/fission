@@ -180,7 +180,7 @@ func (dummy *globalsStruct) DoSetAttr(inHeader *fission.InHeader, setAttrIn *fis
 Restart:
 	grantedLockSet.get(globals.tryLock)
 
-	if 0 != (setAttrIn.Valid & fission.SetAttrInValidFH) {
+	if (0 != (setAttrIn.Valid & fission.SetAttrInValidFH)) && (0 != setAttrIn.FH) {
 		if !globals.alreadyLoggedIgnoring.setAttrInValidFH {
 			globals.logger.Printf("func DoSetAttr(,setAttrIn.Valid==0x%08X) ignoring FH bit (0x%08X)", setAttrIn.Valid, fission.SetAttrInValidFH)
 			globals.alreadyLoggedIgnoring.setAttrInValidFH = true
