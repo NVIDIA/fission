@@ -82,6 +82,8 @@ func (volume *volumeStruct) devFuseFDReader() {
 
 			if 0 == strings.Compare("no such device", err.Error()) {
 				volume.errChan <- nil
+			} else if 0 == strings.Compare("operation not supported by device", err.Error()) {
+				volume.errChan <- nil
 			} else {
 				volume.logger.Printf("Exiting due to /dev/fuse Read err: %v", err)
 				volume.errChan <- err
