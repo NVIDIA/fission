@@ -68,6 +68,10 @@ func (volume *volumeStruct) devFuseFDReader() {
 
 		bytesRead, err = syscall.Read(volume.devFuseFD, devFuseFDReadBuf)
 		if nil != err {
+			// First, discard devFuseFDReadBuf
+
+			volume.devFuseFDReadPoolPut(devFuseFDReadBuf)
+
 			if 0 == strings.Compare("operation not permitted", err.Error()) {
 				// Special case... simply retry the Read
 				continue
