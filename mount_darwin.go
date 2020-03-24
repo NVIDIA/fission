@@ -18,10 +18,14 @@ const (
 
 func (volume *volumeStruct) DoMount() (err error) {
 	var (
+		allowOtherOption              string
 		devOsxFusePath                string
 		devOsxFusePathList            []string
-		iosizeMountOption             string
+		iosizeOption                  string
+		localVolumeOption             string
 		mountOptions                  string
+		noAppleDoubleOption           string
+		noAppleXattrOption            string
 		osxFuseLoadCmd                *exec.Cmd
 		osxFuseLoadCmdCombinedOutput  []byte
 		osxFuseMountCmd               *exec.Cmd
@@ -72,9 +76,17 @@ func (volume *volumeStruct) DoMount() (err error) {
 
 	// Compute mountOptions
 
-	iosizeMountOption = fmt.Sprintf("iosize=%d", volume.initOutMaxWrite)
+	allowOtherOption = "allow_other"
+	localVolumeOption = "local"
+	noAppleDoubleOption = "noappledouble"
+	noAppleXattrOption = "noapplexattr"
 
-	mountOptions = iosizeMountOption
+	mountOptions = allowOtherOption +
+		"," + localVolumeOption +
+		"," + noAppleDoubleOption +
+		"," + noAppleXattrOption
+
+	iosizeOption = fmt.Sprintf("iosize=%d", volume.initOutMaxWrite)
 
 	// Find an available FUSE device file
 
@@ -95,6 +107,7 @@ func (volume *volumeStruct) DoMount() (err error) {
 			Args: []string{
 				osxFuseMountPath,
 				"-o", mountOptions,
+				"-o", iosizeOption,
 				"3", // First ExtraFiles should be an *os.File of volume.devFuseFD
 				volume.mountpointDirPath,
 			},
