@@ -68,9 +68,16 @@ func (volume *volumeStruct) devFuseFDReader() {
 	for {
 		devFuseFDReadBuf = volume.devFuseFDReadPoolGet()
 
+	RetrySyscallRead:
 		bytesRead, err = syscall.Read(volume.devFuseFD, devFuseFDReadBuf)
 		if nil != err {
-			// First, discard devFuseFDReadBuf
+			// First check for EINTR
+
+			if 0 == strings.Compare("interrupted system call", err.Error()) {
+				goto RetrySyscallRead
+			}
+
+			// Now that we are not retrying syscall.Read(), discard devFuseFDReadBuf
 
 			volume.devFuseFDReadPoolPut(devFuseFDReadBuf)
 
@@ -270,12 +277,16 @@ func (volume *volumeStruct) devFuseFDWriter(inHeader *InHeader, errno syscall.Er
 
 	// Finally, send iovec to /dev/fuse
 
+RetrySyscallWriteV:
 	bytesWritten, _, errno = syscall.Syscall(
 		syscall.SYS_WRITEV,
 		uintptr(volume.devFuseFD),
 		uintptr(unsafe.Pointer(&iovec[0])),
 		uintptr(len(iovec)))
 	if 0 == errno {
+		if syscall.EINTR == errno {
+			goto RetrySyscallWriteV
+		}
 		if bytesWritten != iovecSpan {
 			volume.logger.Printf("Write to /dev/fuse returned bad bytesWritten: %v", bytesWritten)
 		}
