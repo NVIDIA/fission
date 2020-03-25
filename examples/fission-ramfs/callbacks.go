@@ -177,6 +177,11 @@ func (dummy *globalsStruct) DoSetAttr(inHeader *fission.InHeader, setAttrIn *fis
 		unixTimeNowSec  uint64
 	)
 
+	if setAttrIn.Valid != (setAttrIn.Valid & (fission.SetAttrInValidMode | fission.SetAttrInValidUID | fission.SetAttrInValidGID | fission.SetAttrInValidSize | fission.SetAttrInValidATime | fission.SetAttrInValidMTime | fission.SetAttrInValidFH | fission.SetAttrInValidATimeNow | fission.SetAttrInValidMTimeNow | fission.SetAttrInValidLockOwner)) {
+		errno = syscall.ENOSYS
+		return
+	}
+
 Restart:
 	grantedLockSet.get(globals.tryLock)
 
@@ -257,6 +262,9 @@ Restart:
 		grantedLockSet.freeAll(false)
 		errno = syscall.ENOSYS
 	}
+
+	// TODO: Verify it is ok to accept but ignore fission.SetAttrInValidFH        in setAttrIn.Valid
+	// TODO: Verify it is ok to accept but ignore fission.SetAttrInValidLockOwner in setAttrIn.Valid
 
 	setAttrOut = &fission.SetAttrOut{
 		AttrValidSec:  0,
