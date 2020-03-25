@@ -17,13 +17,14 @@ const (
 func (volume *volumeStruct) DoMount() (err error) {
 	var (
 		allowOtherOption         string
-		fuseSubtypeMountOption   string
+		fsnameOption             string
+		fuseSubtypeOption        string
 		fusermountChildWriteFile *os.File
 		fusermountParentReadFile *os.File
 		fusermountProgramPath    string
 		fusermountSocketPair     [2]int
 		gid                      int
-		gidMountOption           string
+		gidOption                string
 		mountCmd                 *exec.Cmd
 		mountCmdCombinedOutput   bytes.Buffer
 		mountOptions             string
@@ -32,10 +33,10 @@ func (volume *volumeStruct) DoMount() (err error) {
 		recvmsgOOBN              int
 		recvmsgP                 [recvmsgPSize]byte
 		rootMode                 uint32
-		rootModeMountOption      string
+		rootModeOption           string
 		socketControlMessages    []syscall.SocketControlMessage
 		uid                      int
-		uidMountOption           string
+		uidOption                string
 		unmountCmd               *exec.Cmd
 	)
 
@@ -69,23 +70,25 @@ func (volume *volumeStruct) DoMount() (err error) {
 	}()
 
 	rootMode = syscall.S_IFDIR
-	rootModeMountOption = fmt.Sprintf("rootmode=%o", rootMode)
+	rootModeOption = fmt.Sprintf("rootmode=%o", rootMode)
 
 	uid = syscall.Geteuid()
 	gid = syscall.Getegid()
 
-	uidMountOption = fmt.Sprintf("user_id=%d", uid)
-	gidMountOption = fmt.Sprintf("group_id=%d", gid)
+	uidOption = fmt.Sprintf("user_id=%d", uid)
+	gidOption = fmt.Sprintf("group_id=%d", gid)
 	allowOtherOption = "allow_other"
+	fsnameOption = "fsname=" + volume.volumeName
 
-	mountOptions = rootModeMountOption +
-		"," + uidMountOption +
-		"," + gidMountOption +
-		"," + allowOtherOption
+	mountOptions = rootModeOption +
+		"," + uidOption +
+		"," + gidOption +
+		"," + allowOtherOption +
+		"," + fsnameOption
 
 	if "" != volume.fuseSubtype {
-		fuseSubtypeMountOption = "subtype=" + volume.fuseSubtype
-		mountOptions += "," + fuseSubtypeMountOption
+		fuseSubtypeOption = "subtype=" + volume.fuseSubtype
+		mountOptions += "," + fuseSubtypeOption
 	}
 
 	mountCmd = &exec.Cmd{

@@ -21,6 +21,7 @@ func (volume *volumeStruct) DoMount() (err error) {
 		allowOtherOption              string
 		devOsxFusePath                string
 		devOsxFusePathList            []string
+		fsnameOption                  string
 		iosizeOption                  string
 		localVolumeOption             string
 		mountOptions                  string
@@ -30,6 +31,7 @@ func (volume *volumeStruct) DoMount() (err error) {
 		osxFuseLoadCmdCombinedOutput  []byte
 		osxFuseMountCmd               *exec.Cmd
 		osxFuseMountCmdCombinedOutput []byte
+		volnameOption                 string
 	)
 
 	// Ensure OSXFuse is installed
@@ -80,13 +82,18 @@ func (volume *volumeStruct) DoMount() (err error) {
 	localVolumeOption = "local"
 	noAppleDoubleOption = "noappledouble"
 	noAppleXattrOption = "noapplexattr"
+	fsnameOption = "fsname=" + volume.volumeName
+	volnameOption = "volname=" + volume.volumeName
+
+	iosizeOption = fmt.Sprintf("iosize=%d", volume.initOutMaxWrite)
 
 	mountOptions = allowOtherOption +
 		"," + localVolumeOption +
 		"," + noAppleDoubleOption +
-		"," + noAppleXattrOption
-
-	iosizeOption = fmt.Sprintf("iosize=%d", volume.initOutMaxWrite)
+		"," + noAppleXattrOption +
+		"," + fsnameOption +
+		"," + volnameOption +
+		"," + iosizeOption
 
 	// Find an available FUSE device file
 
@@ -107,7 +114,6 @@ func (volume *volumeStruct) DoMount() (err error) {
 			Args: []string{
 				osxFuseMountPath,
 				"-o", mountOptions,
-				"-o", iosizeOption,
 				"3", // First ExtraFiles should be an *os.File of volume.devFuseFD
 				volume.mountpointDirPath,
 			},
