@@ -18,14 +18,20 @@ const (
 
 func (volume *volumeStruct) DoMount() (err error) {
 	var (
+		allowOtherOption              string
 		devOsxFusePath                string
 		devOsxFusePathList            []string
-		iosizeMountOption             string
+		fsnameOption                  string
+		iosizeOption                  string
+		localVolumeOption             string
 		mountOptions                  string
+		noAppleDoubleOption           string
+		noAppleXattrOption            string
 		osxFuseLoadCmd                *exec.Cmd
 		osxFuseLoadCmdCombinedOutput  []byte
 		osxFuseMountCmd               *exec.Cmd
 		osxFuseMountCmdCombinedOutput []byte
+		volnameOption                 string
 	)
 
 	// Ensure OSXFuse is installed
@@ -72,18 +78,32 @@ func (volume *volumeStruct) DoMount() (err error) {
 
 	// Compute mountOptions
 
-	iosizeMountOption = fmt.Sprintf("iosize=%d", volume.initOutMaxWrite)
+	allowOtherOption = "allow_other"
+	localVolumeOption = "local"
+	noAppleDoubleOption = "noappledouble"
+	noAppleXattrOption = "noapplexattr"
+	fsnameOption = "fsname=" + volume.volumeName
+	volnameOption = "volname=" + volume.volumeName
 
-	mountOptions = iosizeMountOption
+	iosizeOption = fmt.Sprintf("iosize=%d", volume.initOutMaxWrite)
+
+	mountOptions = allowOtherOption +
+		"," + localVolumeOption +
+		"," + noAppleDoubleOption +
+		"," + noAppleXattrOption +
+		"," + fsnameOption +
+		"," + volnameOption +
+		"," + iosizeOption
 
 	// Find an available FUSE device file
 
 	for _, devOsxFusePath = range devOsxFusePathList {
-		volume.devFuseFD, err = syscall.Open(devOsxFusePath, syscall.O_RDWR|syscall.O_CLOEXEC, 0)
+		volume.devFuseFile, err = os.OpenFile(devOsxFusePath, os.O_RDWR, 0000)
 		if nil != err {
 			// Not this one... must be busy
 			continue
 		}
+		volume.devFuseFD = int(volume.devFuseFile.Fd())
 
 		// Mount via this FUSE device file using Mount Helper (fusermount equivalent)
 
@@ -103,7 +123,7 @@ func (volume *volumeStruct) DoMount() (err error) {
 			Stdin:        nil,
 			Stdout:       nil, // This will be redirected to osxFuseMountCmdCombinedOutput below
 			Stderr:       nil, // This will be redirected to osxFuseMountCmdCombinedOutput below
-			ExtraFiles:   []*os.File{os.NewFile(uintptr(volume.devFuseFD), devOsxFusePath)},
+			ExtraFiles:   []*os.File{volume.devFuseFile},
 			SysProcAttr:  nil,
 			Process:      nil,
 			ProcessState: nil,

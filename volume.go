@@ -2,6 +2,7 @@ package fission
 
 import (
 	"log"
+	"os"
 	"strings"
 	"sync"
 	"syscall"
@@ -20,6 +21,7 @@ type volumeStruct struct {
 	devFuseFDReadSize uint32 // InHeaderSize + WriteInSize + InitOut.MaxWrite
 	devFuseFDReadPool sync.Pool
 	devFuseFD         int
+	devFuseFile       *os.File
 	devFuseFDReaderWG sync.WaitGroup
 	callbacksWG       sync.WaitGroup
 }
@@ -68,6 +70,10 @@ func (volume *volumeStruct) devFuseFDReader() {
 
 		bytesRead, err = syscall.Read(volume.devFuseFD, devFuseFDReadBuf)
 		if nil != err {
+			// First, discard devFuseFDReadBuf
+
+			volume.devFuseFDReadPoolPut(devFuseFDReadBuf)
+
 			if 0 == strings.Compare("operation not permitted", err.Error()) {
 				// Special case... simply retry the Read
 				continue
