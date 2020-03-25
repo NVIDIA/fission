@@ -2,6 +2,7 @@ package fission
 
 import (
 	"log"
+	"os"
 	"strings"
 	"sync"
 	"syscall"
@@ -20,6 +21,7 @@ type volumeStruct struct {
 	devFuseFDReadSize uint32 // InHeaderSize + WriteInSize + InitOut.MaxWrite
 	devFuseFDReadPool sync.Pool
 	devFuseFD         int
+	devFuseFile       *os.File
 	devFuseFDReaderWG sync.WaitGroup
 	callbacksWG       sync.WaitGroup
 }

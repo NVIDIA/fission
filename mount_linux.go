@@ -12,6 +12,8 @@ const (
 	recvmsgFlags   int = 0
 	recvmsgOOBSize     = 32
 	recvmsgPSize       = 4
+
+	devLinuxFusePath = "/dev/fuse"
 )
 
 func (volume *volumeStruct) DoMount() (err error) {
@@ -146,6 +148,7 @@ func (volume *volumeStruct) DoMount() (err error) {
 	}
 
 	volume.devFuseFD = childOpenFDs[0]
+	volume.devFuseFile = os.NewFile(uintptr(volume.devFuseFD), devLinuxFusePath)
 
 	volume.devFuseFDReaderWG.Add(1)
 	go volume.devFuseFDReader()
