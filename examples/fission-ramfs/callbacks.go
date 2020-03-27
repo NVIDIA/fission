@@ -177,7 +177,7 @@ func (dummy *globalsStruct) DoSetAttr(inHeader *fission.InHeader, setAttrIn *fis
 		unixTimeNowSec  uint64
 	)
 
-	if setAttrIn.Valid != (setAttrIn.Valid & (fission.SetAttrInValidMode | fission.SetAttrInValidUID | fission.SetAttrInValidGID | fission.SetAttrInValidSize | fission.SetAttrInValidATime | fission.SetAttrInValidMTime | fission.SetAttrInValidFH | fission.SetAttrInValidATimeNow | fission.SetAttrInValidMTimeNow | fission.SetAttrInValidLockOwner)) {
+	if setAttrIn.Valid != (setAttrIn.Valid & (fission.SetAttrInValidMode | fission.SetAttrInValidUID | fission.SetAttrInValidGID | fission.SetAttrInValidSize | fission.SetAttrInValidATime | fission.SetAttrInValidMTime | fission.SetAttrInValidFH | fission.SetAttrInValidATimeNow | fission.SetAttrInValidMTimeNow)) {
 		errno = syscall.ENOSYS
 		return
 	}
@@ -258,13 +258,7 @@ Restart:
 		inode.attr.MTimeNSec = unixTimeNowNSec
 	}
 
-	if 0 != (setAttrIn.Valid & fission.SetAttrInValidLockOwner) {
-		grantedLockSet.freeAll(false)
-		errno = syscall.ENOSYS
-	}
-
-	// TODO: Verify it is ok to accept but ignore fission.SetAttrInValidFH        in setAttrIn.Valid
-	// TODO: Verify it is ok to accept but ignore fission.SetAttrInValidLockOwner in setAttrIn.Valid
+	// TODO: Verify it is ok to accept but ignore fission.SetAttrInValidFH in setAttrIn.Valid
 
 	setAttrOut = &fission.SetAttrOut{
 		AttrValidSec:  0,
@@ -1342,11 +1336,6 @@ Restart:
 		return
 	}
 
-	if 0 == fileInode.attr.NLink {
-		delete(globals.inodeMap, inHeader.NodeID)
-		// Note: Other threads could still be blocked obtaining a lock on fileInode
-	}
-
 	grantedLockSet.freeAll(false)
 
 	errno = 0
@@ -1885,11 +1874,6 @@ Restart:
 		grantedLockSet.freeAll(false)
 		errno = syscall.ENOTDIR
 		return
-	}
-
-	if 0 == dirInode.attr.NLink {
-		delete(globals.inodeMap, inHeader.NodeID)
-		// Note: Other threads could still be blocked obtaining a lock on dirInode
 	}
 
 	grantedLockSet.freeAll(false)
