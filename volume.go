@@ -284,13 +284,13 @@ RetrySyscallWriteV:
 		uintptr(unsafe.Pointer(&iovec[0])),
 		uintptr(len(iovec)))
 	if 0 == errno {
-		if syscall.EINTR == errno {
-			goto RetrySyscallWriteV
-		}
 		if bytesWritten != iovecSpan {
 			volume.logger.Printf("Write to /dev/fuse returned bad bytesWritten: %v", bytesWritten)
 		}
 	} else {
+		if syscall.EINTR == errno {
+			goto RetrySyscallWriteV
+		}
 		volume.logger.Printf("Write to /dev/fuse returned bad errno: %v", errno)
 	}
 }
