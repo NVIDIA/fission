@@ -47,7 +47,7 @@ const (
 	initOutCongestionThreshhold = uint16(0)
 	initOutMaxWrite             = uint32(128 * 1024) // 128KiB... the max write size in Linux FUSE at this time
 
-	attrBlkSize = 4096
+	attrBlkSize = uint32(4096)
 
 	tryLockBackoffMin = time.Duration(time.Second) // time.Duration(100 * time.Microsecond)
 	tryLockBackoffMax = time.Duration(time.Second) // time.Duration(300 * time.Microsecond)

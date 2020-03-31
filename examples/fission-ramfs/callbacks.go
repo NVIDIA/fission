@@ -93,7 +93,7 @@ Restart:
 				UID:       dirEntInode.attr.UID,
 				GID:       dirEntInode.attr.GID,
 				RDev:      dirEntInode.attr.RDev,
-				BlkSize:   dirEntInode.attr.BlkSize,
+				BlkSize:   attrBlkSize,
 				Padding:   dirEntInode.attr.Padding,
 			},
 		},
@@ -154,7 +154,7 @@ Restart:
 			UID:       inode.attr.UID,
 			GID:       inode.attr.GID,
 			RDev:      inode.attr.RDev,
-			BlkSize:   inode.attr.BlkSize,
+			BlkSize:   attrBlkSize,
 			Padding:   inode.attr.Padding,
 		},
 	}
@@ -236,6 +236,8 @@ Restart:
 			inode.fileData = append(inode.fileData, make([]byte, (setAttrIn.Size-inode.attr.Size))...)
 		}
 		inode.attr.Size = setAttrIn.Size
+		inode.attr.Blocks = inode.attr.Size + uint64(attrBlkSize-1)
+		inode.attr.Blocks /= uint64(attrBlkSize)
 	}
 
 	if 0 != (setAttrIn.Valid & fission.SetAttrInValidATime) {
@@ -279,7 +281,7 @@ Restart:
 			UID:       inode.attr.UID,
 			GID:       inode.attr.GID,
 			RDev:      inode.attr.RDev,
-			BlkSize:   inode.attr.BlkSize,
+			BlkSize:   attrBlkSize,
 			Padding:   inode.attr.Padding,
 		},
 	}
@@ -445,7 +447,7 @@ Restart:
 				UID:       dirEntInode.attr.UID,
 				GID:       dirEntInode.attr.GID,
 				RDev:      dirEntInode.attr.RDev,
-				BlkSize:   dirEntInode.attr.BlkSize,
+				BlkSize:   attrBlkSize,
 				Padding:   dirEntInode.attr.Padding,
 			},
 		},
@@ -599,7 +601,7 @@ Restart:
 				UID:       dirEntInode.attr.UID,
 				GID:       dirEntInode.attr.GID,
 				RDev:      dirEntInode.attr.RDev,
-				BlkSize:   dirEntInode.attr.BlkSize,
+				BlkSize:   attrBlkSize,
 				Padding:   dirEntInode.attr.Padding,
 			},
 		},
@@ -1104,7 +1106,7 @@ Restart:
 				UID:       oldInode.attr.UID,
 				GID:       oldInode.attr.GID,
 				RDev:      oldInode.attr.RDev,
-				BlkSize:   oldInode.attr.BlkSize,
+				BlkSize:   attrBlkSize,
 				Padding:   oldInode.attr.Padding,
 			},
 		},
@@ -1273,6 +1275,9 @@ Restart:
 		fileInode.attr.Size = writeOffsetPlusSize
 	}
 
+	fileInode.attr.Blocks = fileInode.attr.Size + uint64(attrBlkSize-1)
+	fileInode.attr.Blocks /= uint64(attrBlkSize)
+
 	grantedLockSet.freeAll(false)
 
 	writeOut = &fission.WriteOut{
@@ -1334,6 +1339,10 @@ Restart:
 		grantedLockSet.freeAll(false)
 		errno = syscall.EINVAL
 		return
+	}
+
+	if 0 == fileInode.attr.NLink {
+		delete(globals.inodeMap, inHeader.NodeID)
 	}
 
 	grantedLockSet.freeAll(false)
@@ -1665,7 +1674,7 @@ func (dummy *globalsStruct) DoInit(inHeader *fission.InHeader, initIn *fission.I
 		Major:                initIn.Major,
 		Minor:                initIn.Minor,
 		MaxReadAhead:         initIn.MaxReadAhead,
-		Flags:                initOutFlagsNearlyAll,
+		Flags:                0, // initOutFlagsNearlyAll,
 		MaxBackground:        initOutMaxBackgound,
 		CongestionThreshhold: initOutCongestionThreshhold,
 		MaxWrite:             initOutMaxWrite,
@@ -1874,6 +1883,10 @@ Restart:
 		grantedLockSet.freeAll(false)
 		errno = syscall.ENOTDIR
 		return
+	}
+
+	if 0 == dirInode.attr.NLink {
+		delete(globals.inodeMap, inHeader.NodeID)
 	}
 
 	grantedLockSet.freeAll(false)
@@ -2184,7 +2197,7 @@ Restart:
 				UID:       fileInode.attr.UID,
 				GID:       fileInode.attr.GID,
 				RDev:      fileInode.attr.RDev,
-				BlkSize:   fileInode.attr.BlkSize,
+				BlkSize:   attrBlkSize,
 				Padding:   fileInode.attr.Padding,
 			},
 		},
@@ -2342,7 +2355,7 @@ Restart:
 					UID:       dirEntInode.attr.UID,
 					GID:       dirEntInode.attr.GID,
 					RDev:      dirEntInode.attr.RDev,
-					BlkSize:   dirEntInode.attr.BlkSize,
+					BlkSize:   attrBlkSize,
 					Padding:   dirEntInode.attr.Padding,
 				},
 			},
