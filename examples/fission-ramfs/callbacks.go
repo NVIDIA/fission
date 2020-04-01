@@ -74,10 +74,10 @@ Restart:
 		EntryOut: fission.EntryOut{
 			NodeID:         dirEntInode.attr.Ino,
 			Generation:     0,
-			EntryValidSec:  0,
-			AttrValidSec:   0,
-			EntryValidNSec: 0,
-			AttrValidNSec:  0,
+			EntryValidSec:  entryValidSec,
+			AttrValidSec:   attrValidSec,
+			EntryValidNSec: entryValidNSec,
+			AttrValidNSec:  attrValidNSec,
 			Attr: fission.Attr{
 				Ino:       dirEntInode.attr.Ino,
 				Size:      dirEntInode.attr.Size,
@@ -136,8 +136,8 @@ Restart:
 	grantedLockSet.free(globals.tryLock)
 
 	getAttrOut = &fission.GetAttrOut{
-		AttrValidSec:  0,
-		AttrValidNSec: 0,
+		AttrValidSec:  attrValidSec,
+		AttrValidNSec: attrValidNSec,
 		Dummy:         0,
 		Attr: fission.Attr{
 			Ino:       inode.attr.Ino,
@@ -263,8 +263,8 @@ Restart:
 	// TODO: Verify it is ok to accept but ignore fission.SetAttrInValidFH in setAttrIn.Valid
 
 	setAttrOut = &fission.SetAttrOut{
-		AttrValidSec:  0,
-		AttrValidNSec: 0,
+		AttrValidSec:  attrValidSec,
+		AttrValidNSec: attrValidNSec,
 		Dummy:         0,
 		Attr: fission.Attr{
 			Ino:       inode.attr.Ino,
@@ -428,10 +428,10 @@ Restart:
 		EntryOut: fission.EntryOut{
 			NodeID:         dirEntInode.attr.Ino,
 			Generation:     0,
-			EntryValidSec:  0,
-			AttrValidSec:   0,
-			EntryValidNSec: 0,
-			AttrValidNSec:  0,
+			EntryValidSec:  entryValidSec,
+			AttrValidSec:   attrValidSec,
+			EntryValidNSec: entryValidNSec,
+			AttrValidNSec:  attrValidNSec,
 			Attr: fission.Attr{
 				Ino:       dirEntInode.attr.Ino,
 				Size:      dirEntInode.attr.Size,
@@ -582,10 +582,10 @@ Restart:
 		EntryOut: fission.EntryOut{
 			NodeID:         dirEntInode.attr.Ino,
 			Generation:     0,
-			EntryValidSec:  0,
-			AttrValidSec:   0,
-			EntryValidNSec: 0,
-			AttrValidNSec:  0,
+			EntryValidSec:  entryValidSec,
+			AttrValidSec:   attrValidSec,
+			EntryValidNSec: entryValidNSec,
+			AttrValidNSec:  attrValidNSec,
 			Attr: fission.Attr{
 				Ino:       dirEntInode.attr.Ino,
 				Size:      dirEntInode.attr.Size,
@@ -1087,10 +1087,10 @@ Restart:
 		EntryOut: fission.EntryOut{
 			NodeID:         oldInode.attr.Ino,
 			Generation:     0,
-			EntryValidSec:  0,
-			AttrValidSec:   0,
-			EntryValidNSec: 0,
-			AttrValidNSec:  0,
+			EntryValidSec:  entryValidSec,
+			AttrValidSec:   attrValidSec,
+			EntryValidNSec: entryValidNSec,
+			AttrValidNSec:  attrValidNSec,
 			Attr: fission.Attr{
 				Ino:       oldInode.attr.Ino,
 				Size:      oldInode.attr.Size,
@@ -1674,7 +1674,7 @@ func (dummy *globalsStruct) DoInit(inHeader *fission.InHeader, initIn *fission.I
 		Major:                initIn.Major,
 		Minor:                initIn.Minor,
 		MaxReadAhead:         initIn.MaxReadAhead,
-		Flags:                0, // initOutFlagsNearlyAll,
+		Flags:                initOutFlagsNearlyAll,
 		MaxBackground:        initOutMaxBackgound,
 		CongestionThreshhold: initOutCongestionThreshhold,
 		MaxWrite:             initOutMaxWrite,
@@ -2178,10 +2178,10 @@ Restart:
 		EntryOut: fission.EntryOut{
 			NodeID:         fileInode.attr.Ino,
 			Generation:     0,
-			EntryValidSec:  0,
-			AttrValidSec:   0,
-			EntryValidNSec: 0,
-			AttrValidNSec:  0,
+			EntryValidSec:  entryValidSec,
+			AttrValidSec:   attrValidSec,
+			EntryValidNSec: entryValidNSec,
+			AttrValidNSec:  attrValidNSec,
 			Attr: fission.Attr{
 				Ino:       fileInode.attr.Ino,
 				Size:      fileInode.attr.Size,
@@ -2336,10 +2336,10 @@ Restart:
 			EntryOut: fission.EntryOut{
 				NodeID:         dirEntInode.attr.Ino,
 				Generation:     0,
-				EntryValidSec:  0,
-				AttrValidSec:   0,
-				EntryValidNSec: 0,
-				AttrValidNSec:  0,
+				EntryValidSec:  entryValidSec,
+				AttrValidSec:   attrValidSec,
+				EntryValidNSec: entryValidNSec,
+				AttrValidNSec:  attrValidNSec,
 				Attr: fission.Attr{
 					Ino:       dirEntInode.attr.Ino,
 					Size:      dirEntInode.attr.Size,

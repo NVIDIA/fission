@@ -49,6 +49,12 @@ const (
 
 	attrBlkSize = uint32(4096)
 
+	entryValidSec  = uint64(10)
+	entryValidNSec = uint32(0)
+
+	attrValidSec  = uint64(10)
+	attrValidNSec = uint32(0)
+
 	tryLockBackoffMin = time.Duration(time.Second) // time.Duration(100 * time.Microsecond)
 	tryLockBackoffMax = time.Duration(time.Second) // time.Duration(300 * time.Microsecond)
 
