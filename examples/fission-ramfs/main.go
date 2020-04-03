@@ -29,18 +29,9 @@ const (
 		fission.InitFlagsBigWrites |
 		fission.InitFlagsAutoInvalData |
 		fission.InitFlagsDoReadDirPlus |
-		fission.InitFlagsNoOpenSupport |
-		fission.InitFlagsAsyncRead |
-		fission.InitFlagsFileOps |
-		fission.InitFlagsAtomicOTrunc |
-		fission.InitFlagsBigWrites |
-		fission.InitFlagsAutoInvalData |
-		fission.InitFlagsDoReadDirPlus |
 		fission.InitFlagsReaddirplusAuto |
-		fission.InitFlagsNoOpenSupport |
 		fission.InitFlagsParallelDirops |
 		fission.InitFlagsMaxPages |
-		fission.InitFlagsNoOpendirSupport |
 		fission.InitFlagsExplicitInvalData
 
 	initOutMaxBackgound         = uint16(100)
