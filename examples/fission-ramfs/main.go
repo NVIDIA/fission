@@ -94,7 +94,7 @@ type globalsStruct struct {
 	errChan               chan error
 	xattrMapDummy         *xattrMapDummyStruct
 	dirEntryMapDummy      *dirEntryMapDummyStruct
-	inodeMap              map[uint64]*inodeStruct // key is inodeStruct.atr.Ino
+	inodeMap              map[uint64]*inodeStruct // key is inodeStruct.attr.Ino
 	lastNodeID            uint64                  // valid NodeID's start at 1... but 1 is the RootDir NodeID
 	alreadyLoggedIgnoring alreadyLoggedIgnoringStruct
 	volume                fission.Volume
@@ -209,7 +209,7 @@ func main() {
 	err = globals.volume.DoUnmount()
 	if nil != err {
 		globals.logger.Printf("fission.DoUnmount() failed: %v", err)
-		os.Exit(2)
+		os.Exit(1)
 	}
 }
 

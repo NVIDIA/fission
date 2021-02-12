@@ -292,7 +292,7 @@ func main() {
 	err = globals.volume.DoUnmount()
 	if nil != err {
 		globals.logger.Printf("fission.DoUnmount() failed: %v", err)
-		os.Exit(2)
+		os.Exit(1)
 	}
 }
 
