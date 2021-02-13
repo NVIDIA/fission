@@ -451,45 +451,90 @@ func (dummy *globalsStruct) DoOpenDir(inHeader *fission.InHeader, openDirIn *fis
 }
 
 func (dummy *globalsStruct) DoReadDir(inHeader *fission.InHeader, readDirIn *fission.ReadDirIn) (readDirOut *fission.ReadDirOut, errno syscall.Errno) {
-	// TODO: Implement DoReadDir()
+	var (
+		dirEntNameLenAligned    uint32
+		dirEntSize              uint32
+		dirEntry                *dirEntryStruct
+		dirEntryAsValue         sortedmap.Value
+		dirEntryIndex           int
+		dirEntryNameAsByteSlice []byte
+		dirEntryType            uint32
+		err                     error
+		numDirEntries           int
+		ok                      bool
+		totalSize               uint32
+	)
 
-	// var (
-	// 	dirEntIndex          int
-	// 	dirEntNameLenAligned uint32
-	// 	dirEntSize           uint32
-	// 	totalSize            uint32
-	// )
+	if 1 != inHeader.NodeID {
+		errno = syscall.ENOENT
+		return
+	}
 
-	// if helloInodeIno == inHeader.NodeID {
-	// 	errno = syscall.EINVAL
-	// 	return
-	// }
-	// if 1 != inHeader.NodeID {
-	// 	errno = syscall.ENOENT
-	// 	return
-	// }
+	numDirEntries, err = globals.rootDirMap.Len()
+	if nil != err {
+		fmt.Printf("globals.rootDirMap.Len() failed: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Printf("UNDO: In DoReadDir()... numDirEntries: %v\n", numDirEntries)
+	fmt.Printf("UNDO: In DoReadDir()... readDirIn.Offset: %v\n", readDirIn.Offset)
 
-	// readDirOut = &fission.ReadDirOut{
-	// 	DirEnt: globals.dirEnt[readDirIn.Offset:],
-	// }
+	readDirOut = &fission.ReadDirOut{
+		DirEnt: make([]fission.DirEnt, 0, numDirEntries),
+	}
 
-	// totalSize = 0
+	totalSize = 0
 
-	// for dirEntIndex = range readDirOut.DirEnt {
-	// 	dirEntNameLenAligned = (uint32(len(readDirOut.DirEnt[dirEntIndex].Name)) + (fission.DirEntAlignment - 1)) & ^uint32(fission.DirEntAlignment-1)
-	// 	dirEntSize = fission.DirEntFixedPortionSize + dirEntNameLenAligned
+	for dirEntryIndex = int(readDirIn.Offset); dirEntryIndex < numDirEntries; dirEntryIndex++ {
+		_, dirEntryAsValue, ok, err = globals.rootDirMap.GetByIndex(dirEntryIndex)
+		if nil != err {
+			fmt.Printf("globals.rootDirMap.GetByIndex(%d) failed: %v\n", dirEntryIndex, err)
+			os.Exit(1)
+		}
+		if nil != err {
+			fmt.Printf("globals.rootDirMap.GetByIndex(%d) returned !ok\n", dirEntryIndex)
+			os.Exit(1)
+		}
 
-	// 	if (totalSize + dirEntSize) > readDirIn.Size {
-	// 		// Truncate readDirOut here and return
+		dirEntry, ok = dirEntryAsValue.(*dirEntryStruct)
+		if !ok {
+			fmt.Printf("dirEntryAsValue.(*dirEntryStruct) returned !ok\n")
+			os.Exit(1)
+		}
+		fmt.Printf("UNDO: In DoReadDir()... got dirEntry: %#v\n", dirEntry)
 
-	// 		readDirOut.DirEnt = readDirOut.DirEnt[:dirEntIndex]
+		dirEntryNameAsByteSlice = []byte(dirEntry.name)
 
-	// 		errno = 0
-	// 		return
-	// 	}
-	// }
+		dirEntNameLenAligned = (uint32(len(dirEntryNameAsByteSlice)) + (fission.DirEntAlignment - 1)) & ^uint32(fission.DirEntAlignment-1)
+		dirEntSize = fission.DirEntFixedPortionSize + dirEntNameLenAligned
 
-	errno = 0
+		if (totalSize + dirEntSize) > readDirIn.Size {
+			fmt.Printf("UNDO: In DoReadDir()... bailing early\n")
+			errno = 0
+			return
+		}
+
+		if dirEntry.isRootDir {
+			dirEntryType = syscall.S_IFDIR
+		} else {
+			dirEntryType = syscall.S_IFREG
+		}
+
+		readDirOut.DirEnt = append(readDirOut.DirEnt, fission.DirEnt{
+			Ino:     dirEntry.inodeNumber,
+			Off:     uint64(dirEntryIndex) + 1,
+			NameLen: uint32(len(dirEntryNameAsByteSlice)), // unnecessary
+			Type:    dirEntryType,
+			Name:    dirEntryNameAsByteSlice,
+		})
+	}
+	fmt.Printf("UNDO: In DoReadDir().. len(readDirOut.DirEnt): %v\n", len(readDirOut.DirEnt))
+
+	if 0 == len(readDirOut.DirEnt) {
+		errno = syscall.ENOENT
+	} else {
+		errno = 0
+	}
+
 	return
 }
 
