@@ -4,51 +4,100 @@
 package main
 
 import (
-	"bytes"
+	"fmt"
+	"os"
 	"syscall"
 
 	"github.com/NVIDIA/fission"
+	"github.com/NVIDIA/sortedmap"
 )
 
+func (fileInode *fileInodeStruct) ensureAttrInCache() {
+	fileInode.RLock()
+
+	if nil != fileInode.cachedAttr {
+		fileInode.RUnlock()
+		return
+	}
+
+	fileInode.RUnlock()
+
+	fileInode.Lock()
+
+	if nil != fileInode.cachedAttr {
+		fileInode.Unlock()
+		return
+	}
+
+	// TODO: populate cachedAttr
+
+	fileInode.Unlock()
+}
+
 func (dummy *globalsStruct) DoLookup(inHeader *fission.InHeader, lookupIn *fission.LookupIn) (lookupOut *fission.LookupOut, errno syscall.Errno) {
-	if rootInodeIno != inHeader.NodeID {
+	var (
+		dirEntry        *dirEntryStruct
+		dirEntryAsValue sortedmap.Value
+		err             error
+		fileInode       *fileInodeStruct
+		ok              bool
+	)
+
+	if 1 != inHeader.NodeID {
 		errno = syscall.ENOENT
 		return
 	}
 
-	if 0 != bytes.Compare(helloFileName, lookupIn.Name) {
+	dirEntryAsValue, ok, err = globals.rootDirMap.GetByKey(string(lookupIn.Name[:]))
+	if nil != err {
+		fmt.Printf("globals.rootDirMap.GetByKey(\"%s\") failed: %v\n", string(lookupIn.Name[:]), err)
+		os.Exit(1)
+	}
+	if !ok {
 		errno = syscall.ENOENT
 		return
 	}
+
+	dirEntry, ok = dirEntryAsValue.(*dirEntryStruct)
+	if !ok {
+		fmt.Printf("dirEntryAsValue.(*dirEntryStruct) returned !ok\n")
+		os.Exit(1)
+	}
+
+	fileInode = globals.fileInodeMap[dirEntry.inodeNumber]
+
+	fileInode.ensureAttrInCache()
 
 	lookupOut = &fission.LookupOut{
 		EntryOut: fission.EntryOut{
-			NodeID:         globals.helloInodeAttr.Ino,
+			NodeID:         fileInode.cachedAttr.Ino,
 			Generation:     0,
 			EntryValidSec:  0,
 			AttrValidSec:   0,
 			EntryValidNSec: 0,
 			AttrValidNSec:  0,
 			Attr: fission.Attr{
-				Ino:       globals.helloInodeAttr.Ino,
-				Size:      globals.helloInodeAttr.Size,
-				Blocks:    globals.helloInodeAttr.Blocks,
-				ATimeSec:  globals.helloInodeAttr.ATimeSec,
-				MTimeSec:  globals.helloInodeAttr.MTimeSec,
-				CTimeSec:  globals.helloInodeAttr.CTimeSec,
-				ATimeNSec: globals.helloInodeAttr.ATimeNSec,
-				MTimeNSec: globals.helloInodeAttr.MTimeNSec,
-				CTimeNSec: globals.helloInodeAttr.CTimeNSec,
-				Mode:      globals.helloInodeAttr.Mode,
-				NLink:     globals.helloInodeAttr.NLink,
-				UID:       globals.helloInodeAttr.UID,
-				GID:       globals.helloInodeAttr.GID,
-				RDev:      globals.helloInodeAttr.RDev,
-				BlkSize:   globals.helloInodeAttr.BlkSize,
-				Padding:   globals.helloInodeAttr.Padding,
+				Ino:       fileInode.cachedAttr.Ino,
+				Size:      fileInode.cachedAttr.Size,
+				Blocks:    fileInode.cachedAttr.Blocks,
+				ATimeSec:  fileInode.cachedAttr.ATimeSec,
+				MTimeSec:  fileInode.cachedAttr.MTimeSec,
+				CTimeSec:  fileInode.cachedAttr.CTimeSec,
+				ATimeNSec: fileInode.cachedAttr.ATimeNSec,
+				MTimeNSec: fileInode.cachedAttr.MTimeNSec,
+				CTimeNSec: fileInode.cachedAttr.CTimeNSec,
+				Mode:      fileInode.cachedAttr.Mode,
+				NLink:     fileInode.cachedAttr.NLink,
+				UID:       fileInode.cachedAttr.UID,
+				GID:       fileInode.cachedAttr.GID,
+				RDev:      fileInode.cachedAttr.RDev,
+				BlkSize:   fileInode.cachedAttr.BlkSize,
+				Padding:   fileInode.cachedAttr.Padding,
 			},
 		},
 	}
+
+	fixAttr(&lookupOut.EntryOut.Attr)
 
 	errno = 0
 	return
@@ -60,16 +109,23 @@ func (dummy *globalsStruct) DoForget(inHeader *fission.InHeader, forgetIn *fissi
 
 func (dummy *globalsStruct) DoGetAttr(inHeader *fission.InHeader, getAttrIn *fission.GetAttrIn) (getAttrOut *fission.GetAttrOut, errno syscall.Errno) {
 	var (
+		fileInode *fileInodeStruct
 		inodeAttr *fission.Attr
+		ok        bool
 	)
 
-	if rootInodeIno == inHeader.NodeID {
-		inodeAttr = globals.rootInodeAttr
-	} else if helloInodeIno == inHeader.NodeID {
-		inodeAttr = globals.helloInodeAttr
+	if 1 == inHeader.NodeID {
+		inodeAttr = globals.rootDirAttr
 	} else {
-		errno = syscall.ENOENT
-		return
+		fileInode, ok = globals.fileInodeMap[uint64(inHeader.NodeID)]
+		if !ok {
+			errno = syscall.ENOENT
+			return
+		}
+
+		fileInode.ensureAttrInCache()
+
+		inodeAttr = fileInode.cachedAttr
 	}
 
 	getAttrOut = &fission.GetAttrOut{
@@ -95,6 +151,8 @@ func (dummy *globalsStruct) DoGetAttr(inHeader *fission.InHeader, getAttrIn *fis
 			Padding:   inodeAttr.Padding,
 		},
 	}
+
+	fixAttr(&getAttrOut.Attr)
 
 	errno = 0
 	return
@@ -146,14 +204,23 @@ func (dummy *globalsStruct) DoLink(inHeader *fission.InHeader, linkIn *fission.L
 }
 
 func (dummy *globalsStruct) DoOpen(inHeader *fission.InHeader, openIn *fission.OpenIn) (openOut *fission.OpenOut, errno syscall.Errno) {
-	if rootInodeIno == inHeader.NodeID {
+	var (
+		fileInode *fileInodeStruct
+		ok        bool
+	)
+
+	if 1 == inHeader.NodeID {
 		errno = syscall.EINVAL
 		return
 	}
-	if helloInodeIno != inHeader.NodeID {
+
+	fileInode, ok = globals.fileInodeMap[uint64(inHeader.NodeID)]
+	if !ok {
 		errno = syscall.ENOENT
 		return
 	}
+
+	fileInode.ensureAttrInCache()
 
 	openOut = &fission.OpenOut{
 		FH:        0,
@@ -166,29 +233,31 @@ func (dummy *globalsStruct) DoOpen(inHeader *fission.InHeader, openIn *fission.O
 }
 
 func (dummy *globalsStruct) DoRead(inHeader *fission.InHeader, readIn *fission.ReadIn) (readOut *fission.ReadOut, errno syscall.Errno) {
-	if helloInodeIno != inHeader.NodeID {
-		errno = syscall.ENOENT
-		return
-	}
+	// TODO: Implement DoRead()
 
-	var (
-		adjustedOffset uint64
-		adjustedSize   uint32
-	)
+	// if helloInodeIno != inHeader.NodeID {
+	// 	errno = syscall.ENOENT
+	// 	return
+	// }
 
-	adjustedOffset = uint64(len(helloInodeFileData))
-	if readIn.Offset < adjustedOffset {
-		adjustedOffset = readIn.Offset
-	}
+	// var (
+	// 	adjustedOffset uint64
+	// 	adjustedSize   uint32
+	// )
 
-	adjustedSize = readIn.Size
-	if (adjustedOffset + uint64(adjustedSize)) > uint64(len(helloInodeFileData)) {
-		adjustedSize = uint32(len(helloInodeFileData)) - uint32(adjustedOffset)
-	}
+	// adjustedOffset = uint64(len(helloInodeFileData))
+	// if readIn.Offset < adjustedOffset {
+	// 	adjustedOffset = readIn.Offset
+	// }
 
-	readOut = &fission.ReadOut{
-		Data: cloneByteSlice(helloInodeFileData[adjustedOffset:(adjustedOffset + uint64(adjustedSize))]),
-	}
+	// adjustedSize = readIn.Size
+	// if (adjustedOffset + uint64(adjustedSize)) > uint64(len(helloInodeFileData)) {
+	// 	adjustedSize = uint32(len(helloInodeFileData)) - uint32(adjustedOffset)
+	// }
+
+	// readOut = &fission.ReadOut{
+	// 	Data: cloneByteSlice(helloInodeFileData[adjustedOffset:(adjustedOffset + uint64(adjustedSize))]),
+	// }
 
 	errno = 0
 	return
@@ -261,7 +330,7 @@ func (dummy *globalsStruct) DoInit(inHeader *fission.InHeader, initIn *fission.I
 		Major:                initIn.Major,
 		Minor:                initIn.Minor,
 		MaxReadAhead:         initIn.MaxReadAhead,
-		Flags:                initOutFlagsNearlyAll,
+		Flags:                initOutFlagsReadOnly,
 		MaxBackground:        initOutMaxBackgound,
 		CongestionThreshhold: initOutCongestionThreshhold,
 		MaxWrite:             initOutMaxWrite,
@@ -272,11 +341,7 @@ func (dummy *globalsStruct) DoInit(inHeader *fission.InHeader, initIn *fission.I
 }
 
 func (dummy *globalsStruct) DoOpenDir(inHeader *fission.InHeader, openDirIn *fission.OpenDirIn) (openDirOut *fission.OpenDirOut, errno syscall.Errno) {
-	if helloInodeIno == inHeader.NodeID {
-		errno = syscall.EINVAL
-		return
-	}
-	if rootInodeIno != inHeader.NodeID {
+	if 1 != inHeader.NodeID {
 		errno = syscall.ENOENT
 		return
 	}
@@ -292,48 +357,50 @@ func (dummy *globalsStruct) DoOpenDir(inHeader *fission.InHeader, openDirIn *fis
 }
 
 func (dummy *globalsStruct) DoReadDir(inHeader *fission.InHeader, readDirIn *fission.ReadDirIn) (readDirOut *fission.ReadDirOut, errno syscall.Errno) {
-	var (
-		dirEntIndex          int
-		dirEntNameLenAligned uint32
-		dirEntSize           uint32
-		totalSize            uint32
-	)
+	// TODO: Implement DoReadDir()
 
-	if helloInodeIno == inHeader.NodeID {
-		errno = syscall.EINVAL
-		return
-	}
-	if rootInodeIno != inHeader.NodeID {
-		errno = syscall.ENOENT
-		return
-	}
+	// var (
+	// 	dirEntIndex          int
+	// 	dirEntNameLenAligned uint32
+	// 	dirEntSize           uint32
+	// 	totalSize            uint32
+	// )
 
-	readDirOut = &fission.ReadDirOut{
-		DirEnt: globals.dirEnt[readDirIn.Offset:],
-	}
+	// if helloInodeIno == inHeader.NodeID {
+	// 	errno = syscall.EINVAL
+	// 	return
+	// }
+	// if 1 != inHeader.NodeID {
+	// 	errno = syscall.ENOENT
+	// 	return
+	// }
 
-	totalSize = 0
+	// readDirOut = &fission.ReadDirOut{
+	// 	DirEnt: globals.dirEnt[readDirIn.Offset:],
+	// }
 
-	for dirEntIndex = range readDirOut.DirEnt {
-		dirEntNameLenAligned = (uint32(len(readDirOut.DirEnt[dirEntIndex].Name)) + (fission.DirEntAlignment - 1)) & ^uint32(fission.DirEntAlignment-1)
-		dirEntSize = fission.DirEntFixedPortionSize + dirEntNameLenAligned
+	// totalSize = 0
 
-		if (totalSize + dirEntSize) > readDirIn.Size {
-			// Truncate readDirOut here and return
+	// for dirEntIndex = range readDirOut.DirEnt {
+	// 	dirEntNameLenAligned = (uint32(len(readDirOut.DirEnt[dirEntIndex].Name)) + (fission.DirEntAlignment - 1)) & ^uint32(fission.DirEntAlignment-1)
+	// 	dirEntSize = fission.DirEntFixedPortionSize + dirEntNameLenAligned
 
-			readDirOut.DirEnt = readDirOut.DirEnt[:dirEntIndex]
+	// 	if (totalSize + dirEntSize) > readDirIn.Size {
+	// 		// Truncate readDirOut here and return
 
-			errno = 0
-			return
-		}
-	}
+	// 		readDirOut.DirEnt = readDirOut.DirEnt[:dirEntIndex]
+
+	// 		errno = 0
+	// 		return
+	// 	}
+	// }
 
 	errno = 0
 	return
 }
 
 func (dummy *globalsStruct) DoReleaseDir(inHeader *fission.InHeader, releaseDirIn *fission.ReleaseDirIn) (errno syscall.Errno) {
-	if rootInodeIno != inHeader.NodeID {
+	if 1 != inHeader.NodeID {
 		errno = syscall.EINVAL
 		return
 	}
@@ -363,19 +430,29 @@ func (dummy *globalsStruct) DoSetLKW(inHeader *fission.InHeader, setLKWIn *fissi
 }
 
 func (dummy *globalsStruct) DoAccess(inHeader *fission.InHeader, accessIn *fission.AccessIn) (errno syscall.Errno) {
+	var (
+		fileInode *fileInodeStruct
+		ok        bool
+	)
+
 	if 0 != (accessIn.Mask & accessWOK) {
 		errno = syscall.EACCES
 	} else {
-		if rootInodeIno == inHeader.NodeID {
+		if 1 == inHeader.NodeID {
 			errno = 0
-		} else if helloInodeIno == inHeader.NodeID {
-			if 0 != (accessIn.Mask & accessXOK) {
-				errno = syscall.EACCES
-			} else {
-				errno = 0
-			}
 		} else {
-			errno = syscall.ENOENT
+			fileInode, ok = globals.fileInodeMap[uint64(inHeader.NodeID)]
+			if ok {
+				fileInode.ensureAttrInCache()
+
+				if 0 != (accessIn.Mask & accessXOK) {
+					errno = syscall.EACCES
+				} else {
+					errno = 0
+				}
+			} else {
+				errno = syscall.ENOENT
+			}
 		}
 	}
 
@@ -416,41 +493,43 @@ func (dummy *globalsStruct) DoFAllocate(inHeader *fission.InHeader, fAllocateIn 
 }
 
 func (dummy *globalsStruct) DoReadDirPlus(inHeader *fission.InHeader, readDirPlusIn *fission.ReadDirPlusIn) (readDirPlusOut *fission.ReadDirPlusOut, errno syscall.Errno) {
-	var (
-		dirEntPlusIndex      int
-		dirEntNameLenAligned uint32
-		dirEntSize           uint32
-		totalSize            uint32
-	)
+	// TODO: Implement DoReadDirPlus()
 
-	if helloInodeIno == inHeader.NodeID {
-		errno = syscall.EINVAL
-		return
-	}
-	if rootInodeIno != inHeader.NodeID {
-		errno = syscall.ENOENT
-		return
-	}
+	// var (
+	// 	dirEntPlusIndex      int
+	// 	dirEntNameLenAligned uint32
+	// 	dirEntSize           uint32
+	// 	totalSize            uint32
+	// )
 
-	readDirPlusOut = &fission.ReadDirPlusOut{
-		DirEntPlus: globals.dirEntPlus[readDirPlusIn.Offset:],
-	}
+	// if helloInodeIno == inHeader.NodeID {
+	// 	errno = syscall.EINVAL
+	// 	return
+	// }
+	// if 1 != inHeader.NodeID {
+	// 	errno = syscall.ENOENT
+	// 	return
+	// }
 
-	totalSize = 0
+	// readDirPlusOut = &fission.ReadDirPlusOut{
+	// 	DirEntPlus: globals.dirEntPlus[readDirPlusIn.Offset:],
+	// }
 
-	for dirEntPlusIndex = range readDirPlusOut.DirEntPlus {
-		dirEntNameLenAligned = (uint32(len(readDirPlusOut.DirEntPlus[dirEntPlusIndex].Name)) + (fission.DirEntAlignment - 1)) & ^uint32(fission.DirEntAlignment-1)
-		dirEntSize = fission.DirEntPlusFixedPortionSize + dirEntNameLenAligned
+	// totalSize = 0
 
-		if (totalSize + dirEntSize) > readDirPlusIn.Size {
-			// Truncate readDirOut here and return
+	// for dirEntPlusIndex = range readDirPlusOut.DirEntPlus {
+	// 	dirEntNameLenAligned = (uint32(len(readDirPlusOut.DirEntPlus[dirEntPlusIndex].Name)) + (fission.DirEntAlignment - 1)) & ^uint32(fission.DirEntAlignment-1)
+	// 	dirEntSize = fission.DirEntPlusFixedPortionSize + dirEntNameLenAligned
 
-			readDirPlusOut.DirEntPlus = readDirPlusOut.DirEntPlus[:dirEntPlusIndex]
+	// 	if (totalSize + dirEntSize) > readDirPlusIn.Size {
+	// 		// Truncate readDirOut here and return
 
-			errno = 0
-			return
-		}
-	}
+	// 		readDirPlusOut.DirEntPlus = readDirPlusOut.DirEntPlus[:dirEntPlusIndex]
+
+	// 		errno = 0
+	// 		return
+	// 	}
+	// }
 
 	errno = 0
 	return

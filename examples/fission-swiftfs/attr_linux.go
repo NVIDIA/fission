@@ -8,5 +8,6 @@ import (
 )
 
 func fixAttr(attr *fission.Attr) {
-	// Nothing needed
+	attr.Blocks = (attr.Size + uint64(attrBlkSize) - 1) / uint64(attrBlkSize)
+	attr.BlkSize = attrBlkSize
 }

@@ -67,10 +67,10 @@ type dirEntryStruct struct {
 }
 
 type fileInodeStruct struct {
-	sync.RWMutex
-	objectName  string // No hard link support... so this is 1:1 mapped
-	inodeNumber uint64 // Will match cachedStat.Ino if available
-	cachedStat  *fission.Attr
+	sync.RWMutex        // Protects the cachedAttr
+	objectName   string // No hard link support... so this is 1:1 mapped
+	inodeNumber  uint64 // Will match cachedAttr.Ino if available
+	cachedAttr   *fission.Attr
 }
 
 type configStruct struct {
@@ -84,7 +84,7 @@ type configStruct struct {
 }
 
 type globalsStruct struct {
-	sync.RWMutex
+	sync.RWMutex // Protects the read cache
 	config       *configStruct
 	volumeName   string
 	swiftTimeout time.Duration
@@ -317,7 +317,7 @@ func main() {
 		fileInode = &fileInodeStruct{
 			objectName:  dirEntry.name,
 			inodeNumber: dirEntry.inodeNumber,
-			cachedStat:  nil,
+			cachedAttr:  nil,
 		}
 
 		globals.fileInodeMap[fileInode.inodeNumber] = fileInode
