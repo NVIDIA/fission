@@ -58,6 +58,8 @@ const (
 
 	dirMode  = uint32(syscall.S_IFDIR | syscall.S_IRUSR | syscall.S_IXUSR | syscall.S_IRGRP | syscall.S_IXGRP | syscall.S_IROTH | syscall.S_IXOTH)
 	fileMode = uint32(syscall.S_IFREG | syscall.S_IRUSR | syscall.S_IRGRP | syscall.S_IROTH)
+
+	attrTailSize = 1024 // If == 0, HEAD is performed; if != 0, GET Range: bytes=-attrTailSize is performed
 )
 
 type dirEntryStruct struct {
@@ -84,17 +86,19 @@ type configStruct struct {
 }
 
 type globalsStruct struct {
-	sync.RWMutex // Protects the read cache
-	config       *configStruct
-	volumeName   string
-	swiftTimeout time.Duration
-	httpClient   *http.Client
-	rootDirAttr  *fission.Attr
-	rootDirMap   sortedmap.LLRBTree          // key=dirEntryStruct.name; value=*dirEntryStruct
-	fileInodeMap map[uint64]*fileInodeStruct // key=fileInodeStruct.inodeNumber; value=*fileInodeStruct
-	logger       *log.Logger
-	errChan      chan error
-	volume       fission.Volume
+	sync.RWMutex        // Protects the read cache
+	config              *configStruct
+	volumeName          string
+	swiftTimeout        time.Duration
+	startTime           time.Time
+	attrTailRangeHeader string
+	httpClient          *http.Client
+	rootDirAttr         *fission.Attr
+	rootDirMap          sortedmap.LLRBTree          // key=dirEntryStruct.name; value=*dirEntryStruct
+	fileInodeMap        map[uint64]*fileInodeStruct // key=fileInodeStruct.inodeNumber; value=*fileInodeStruct
+	logger              *log.Logger
+	errChan             chan error
+	volume              fission.Volume
 }
 
 var globals globalsStruct
@@ -155,6 +159,14 @@ func main() {
 	if nil != err {
 		fmt.Printf("time.ParseDuration(\"%s\") failed: %v\n", globals.config.SwiftTimeout, err)
 		os.Exit(1)
+	}
+
+	globals.startTime = time.Now()
+
+	if 0 == attrTailSize {
+		globals.attrTailRangeHeader = ""
+	} else {
+		globals.attrTailRangeHeader = fmt.Sprintf("bytes=-%d", attrTailSize)
 	}
 
 	defaultTransport, ok = http.DefaultTransport.(*http.Transport)
@@ -226,7 +238,7 @@ func main() {
 	if nil == err {
 		rootDirMTimeSec, rootDirMTimeNSec = goTimeToUnixTime(rootDirMTime)
 	} else {
-		rootDirMTimeSec, rootDirMTimeNSec = goTimeToUnixTime(time.Now())
+		rootDirMTimeSec, rootDirMTimeNSec = goTimeToUnixTime(globals.startTime)
 	}
 
 	globals.rootDirAttr = &fission.Attr{

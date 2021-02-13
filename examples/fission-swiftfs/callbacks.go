@@ -5,14 +5,30 @@ package main
 
 import (
 	"fmt"
+	"io/ioutil"
+	"net/http"
 	"os"
+	"strconv"
 	"syscall"
+	"time"
 
 	"github.com/NVIDIA/fission"
 	"github.com/NVIDIA/sortedmap"
 )
 
 func (fileInode *fileInodeStruct) ensureAttrInCache() {
+	var (
+		contentLength     uint64
+		err               error
+		httpRequest       *http.Request
+		httpRequestMethod string
+		httpResponse      *http.Response
+		mTime             time.Time
+		mTimeNSec         uint32
+		mTimeSec          uint64
+		objectURL         string
+	)
+
 	fileInode.RLock()
 
 	if nil != fileInode.cachedAttr {
@@ -29,7 +45,85 @@ func (fileInode *fileInodeStruct) ensureAttrInCache() {
 		return
 	}
 
-	// TODO: populate cachedAttr
+	objectURL = globals.config.ContainerURL + "/" + fileInode.objectName
+
+	if 0 == attrTailSize {
+		httpRequestMethod = "HEAD"
+	} else {
+		httpRequestMethod = "GET"
+	}
+
+	httpRequest, err = http.NewRequest(httpRequestMethod, objectURL, nil)
+	if nil != err {
+		fmt.Printf("http.NewRequest(\"%s\", \"%s\", nil) failed: %v\n", httpRequestMethod, objectURL, err)
+		os.Exit(1)
+	}
+
+	httpRequest.Header["User-Agent"] = []string{httpUserAgent}
+
+	if "" != globals.config.AuthToken {
+		httpRequest.Header["X-Auth-Token"] = []string{globals.config.AuthToken}
+	}
+
+	if 0 != attrTailSize {
+		httpRequest.Header["Range"] = []string{globals.attrTailRangeHeader}
+	}
+
+	httpResponse, err = globals.httpClient.Do(httpRequest)
+	if nil != err {
+		fmt.Printf("globals.httpClient.Do(%s %s) failed: %v\n", httpRequestMethod, objectURL, err)
+		os.Exit(1)
+	}
+
+	_, err = ioutil.ReadAll(httpResponse.Body)
+	if nil != err {
+		fmt.Printf("ioutil.ReadAll(httpResponse.Body) failed: %v\n", err)
+		os.Exit(1)
+	}
+	err = httpResponse.Body.Close()
+	if nil != err {
+		fmt.Printf("httpResponse.Body.Close() failed: %v\n", err)
+		os.Exit(1)
+	}
+
+	if (200 > httpResponse.StatusCode) || (299 < httpResponse.StatusCode) {
+		fmt.Printf("globals.httpClient.Do(%s %s) returned unexpected Status: %s\n", httpRequestMethod, objectURL, httpResponse.Status)
+		os.Exit(1)
+	}
+
+	contentLength, err = strconv.ParseUint(httpResponse.Header.Get("Content-Length"), 10, 64)
+	if nil != err {
+		fmt.Printf("strconv.ParseUint(httpResponse.Header.Get(\"Content-Length\"), 10, 64) failed: %v\n", err)
+		os.Exit(1)
+	}
+
+	mTime, err = time.Parse(time.RFC1123, httpResponse.Header.Get("Last-Modified"))
+	if nil == err {
+		mTimeSec, mTimeNSec = goTimeToUnixTime(mTime)
+	} else {
+		mTimeSec, mTimeNSec = goTimeToUnixTime(globals.startTime)
+	}
+
+	fileInode.cachedAttr = &fission.Attr{
+		Ino:       1,
+		Size:      contentLength,
+		Blocks:    0,
+		ATimeSec:  mTimeSec,
+		MTimeSec:  mTimeSec,
+		CTimeSec:  mTimeSec,
+		ATimeNSec: mTimeNSec,
+		MTimeNSec: mTimeNSec,
+		CTimeNSec: mTimeNSec,
+		Mode:      fileMode,
+		NLink:     1,
+		UID:       0,
+		GID:       0,
+		RDev:      0,
+		BlkSize:   attrBlkSize,
+		Padding:   0,
+	}
+
+	fixAttr(fileInode.cachedAttr)
 
 	fileInode.Unlock()
 }
