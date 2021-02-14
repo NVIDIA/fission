@@ -326,6 +326,8 @@ func (dummy *globalsStruct) DoReadDir(inHeader *fission.InHeader, readDirIn *fis
 			errno = 0
 			return
 		}
+
+		totalSize += dirEntSize
 	}
 
 	errno = 0
@@ -450,6 +452,8 @@ func (dummy *globalsStruct) DoReadDirPlus(inHeader *fission.InHeader, readDirPlu
 			errno = 0
 			return
 		}
+
+		totalSize += dirEntSize
 	}
 
 	errno = 0

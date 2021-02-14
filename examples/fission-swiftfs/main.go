@@ -30,6 +30,8 @@ const (
 	initOutFlagsReadOnly = uint32(0) |
 		fission.InitFlagsAsyncRead |
 		fission.InitFlagsFileOps |
+		fission.InitFlagsDoReadDirPlus |
+		fission.InitFlagsReaddirplusAuto |
 		fission.InitFlagsParallelDirops |
 		fission.InitFlagsMaxPages |
 		fission.InitFlagsNoOpendirSupport |
