@@ -58,8 +58,6 @@ const (
 
 	dirMode  = uint32(syscall.S_IFDIR | syscall.S_IRUSR | syscall.S_IXUSR | syscall.S_IRGRP | syscall.S_IXGRP | syscall.S_IROTH | syscall.S_IXOTH)
 	fileMode = uint32(syscall.S_IFREG | syscall.S_IRUSR | syscall.S_IRGRP | syscall.S_IROTH)
-
-	attrTailSize = 1024 // If == 0, HEAD is performed; if != 0, GET Range: bytes=-attrTailSize is performed
 )
 
 type dirEntryStruct struct {
@@ -86,19 +84,18 @@ type configStruct struct {
 }
 
 type globalsStruct struct {
-	sync.RWMutex        // Protects the read cache
-	config              *configStruct
-	volumeName          string
-	swiftTimeout        time.Duration
-	startTime           time.Time
-	attrTailRangeHeader string
-	httpClient          *http.Client
-	rootDirAttr         *fission.Attr
-	rootDirMap          sortedmap.LLRBTree          // key=dirEntryStruct.name; value=*dirEntryStruct
-	fileInodeMap        map[uint64]*fileInodeStruct // key=fileInodeStruct.inodeNumber; value=*fileInodeStruct
-	logger              *log.Logger
-	errChan             chan error
-	volume              fission.Volume
+	sync.RWMutex // Protects the read cache
+	config       *configStruct
+	volumeName   string
+	swiftTimeout time.Duration
+	startTime    time.Time
+	httpClient   *http.Client
+	rootDirAttr  *fission.Attr
+	rootDirMap   sortedmap.LLRBTree          // key=dirEntryStruct.name; value=*dirEntryStruct
+	fileInodeMap map[uint64]*fileInodeStruct // key=fileInodeStruct.inodeNumber; value=*fileInodeStruct
+	logger       *log.Logger
+	errChan      chan error
+	volume       fission.Volume
 }
 
 var globals globalsStruct
@@ -162,12 +159,6 @@ func main() {
 	}
 
 	globals.startTime = time.Now()
-
-	if 0 == attrTailSize {
-		globals.attrTailRangeHeader = ""
-	} else {
-		globals.attrTailRangeHeader = fmt.Sprintf("bytes=-%d", attrTailSize)
-	}
 
 	defaultTransport, ok = http.DefaultTransport.(*http.Transport)
 	if !ok {
@@ -338,8 +329,6 @@ func main() {
 	globals.logger = log.New(os.Stdout, "", log.Ldate|log.Ltime) // |log.Lmicroseconds|log.Lshortfile
 
 	globals.errChan = make(chan error, 1)
-
-	// UNDO ??? globals.alreadyLoggedIgnoring.setAttrInValidFH = false
 
 	globals.volume = fission.NewVolume(globals.volumeName, globals.config.MountPoint, fuseSubtype, initOutMaxWrite, &globals, globals.logger, globals.errChan)
 

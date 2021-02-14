@@ -18,15 +18,14 @@ import (
 
 func (fileInode *fileInodeStruct) ensureAttrInCache() {
 	var (
-		contentLength     uint64
-		err               error
-		httpRequest       *http.Request
-		httpRequestMethod string
-		httpResponse      *http.Response
-		mTime             time.Time
-		mTimeNSec         uint32
-		mTimeSec          uint64
-		objectURL         string
+		contentLength uint64
+		err           error
+		httpRequest   *http.Request
+		httpResponse  *http.Response
+		mTime         time.Time
+		mTimeNSec     uint32
+		mTimeSec      uint64
+		objectURL     string
 	)
 
 	fileInode.RLock()
@@ -47,15 +46,9 @@ func (fileInode *fileInodeStruct) ensureAttrInCache() {
 
 	objectURL = globals.config.ContainerURL + "/" + fileInode.objectName
 
-	if 0 == attrTailSize {
-		httpRequestMethod = "HEAD"
-	} else {
-		httpRequestMethod = "GET"
-	}
-
-	httpRequest, err = http.NewRequest(httpRequestMethod, objectURL, nil)
+	httpRequest, err = http.NewRequest("HEAD", objectURL, nil)
 	if nil != err {
-		fmt.Printf("http.NewRequest(\"%s\", \"%s\", nil) failed: %v\n", httpRequestMethod, objectURL, err)
+		fmt.Printf("http.NewRequest(\"HEAD\", \"%s\", nil) failed: %v\n", objectURL, err)
 		os.Exit(1)
 	}
 
@@ -65,13 +58,9 @@ func (fileInode *fileInodeStruct) ensureAttrInCache() {
 		httpRequest.Header["X-Auth-Token"] = []string{globals.config.AuthToken}
 	}
 
-	if 0 != attrTailSize {
-		httpRequest.Header["Range"] = []string{globals.attrTailRangeHeader}
-	}
-
 	httpResponse, err = globals.httpClient.Do(httpRequest)
 	if nil != err {
-		fmt.Printf("globals.httpClient.Do(%s %s) failed: %v\n", httpRequestMethod, objectURL, err)
+		fmt.Printf("globals.httpClient.Do(HEAD %s) failed: %v\n", objectURL, err)
 		os.Exit(1)
 	}
 
@@ -87,7 +76,7 @@ func (fileInode *fileInodeStruct) ensureAttrInCache() {
 	}
 
 	if (200 > httpResponse.StatusCode) || (299 < httpResponse.StatusCode) {
-		fmt.Printf("globals.httpClient.Do(%s %s) returned unexpected Status: %s\n", httpRequestMethod, objectURL, httpResponse.Status)
+		fmt.Printf("globals.httpClient.Do(HEAD %s) returned unexpected Status: %s\n", objectURL, httpResponse.Status)
 		os.Exit(1)
 	}
 
@@ -105,7 +94,7 @@ func (fileInode *fileInodeStruct) ensureAttrInCache() {
 	}
 
 	fileInode.cachedAttr = &fission.Attr{
-		Ino:       1,
+		Ino:       fileInode.inodeNumber,
 		Size:      contentLength,
 		Blocks:    0,
 		ATimeSec:  mTimeSec,
@@ -475,8 +464,6 @@ func (dummy *globalsStruct) DoReadDir(inHeader *fission.InHeader, readDirIn *fis
 		fmt.Printf("globals.rootDirMap.Len() failed: %v\n", err)
 		os.Exit(1)
 	}
-	fmt.Printf("UNDO: In DoReadDir()... numDirEntries: %v\n", numDirEntries)
-	fmt.Printf("UNDO: In DoReadDir()... readDirIn.Offset: %v\n", readDirIn.Offset)
 
 	readDirOut = &fission.ReadDirOut{
 		DirEnt: make([]fission.DirEnt, 0, numDirEntries),
@@ -500,7 +487,6 @@ func (dummy *globalsStruct) DoReadDir(inHeader *fission.InHeader, readDirIn *fis
 			fmt.Printf("dirEntryAsValue.(*dirEntryStruct) returned !ok\n")
 			os.Exit(1)
 		}
-		fmt.Printf("UNDO: In DoReadDir()... got dirEntry: %#v\n", dirEntry)
 
 		dirEntryNameAsByteSlice = []byte(dirEntry.name)
 
@@ -508,7 +494,6 @@ func (dummy *globalsStruct) DoReadDir(inHeader *fission.InHeader, readDirIn *fis
 		dirEntSize = fission.DirEntFixedPortionSize + dirEntNameLenAligned
 
 		if (totalSize + dirEntSize) > readDirIn.Size {
-			fmt.Printf("UNDO: In DoReadDir()... bailing early\n")
 			errno = 0
 			return
 		}
@@ -527,7 +512,6 @@ func (dummy *globalsStruct) DoReadDir(inHeader *fission.InHeader, readDirIn *fis
 			Name:    dirEntryNameAsByteSlice,
 		})
 	}
-	fmt.Printf("UNDO: In DoReadDir().. len(readDirOut.DirEnt): %v\n", len(readDirOut.DirEnt))
 
 	if 0 == len(readDirOut.DirEnt) {
 		errno = syscall.ENOENT
