@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"sync"
 	"syscall"
 	"time"
 
@@ -200,7 +201,7 @@ func (dummy *globalsStruct) DoGetAttr(inHeader *fission.InHeader, getAttrIn *fis
 	if 1 == inHeader.NodeID {
 		inodeAttr = globals.rootDirAttr
 	} else {
-		fileInode, ok = globals.fileInodeMap[uint64(inHeader.NodeID)]
+		fileInode, ok = globals.fileInodeMap[inHeader.NodeID]
 		if !ok {
 			errno = syscall.ENOENT
 			return
@@ -297,7 +298,7 @@ func (dummy *globalsStruct) DoOpen(inHeader *fission.InHeader, openIn *fission.O
 		return
 	}
 
-	fileInode, ok = globals.fileInodeMap[uint64(inHeader.NodeID)]
+	fileInode, ok = globals.fileInodeMap[inHeader.NodeID]
 	if !ok {
 		errno = syscall.ENOENT
 		return
@@ -566,7 +567,7 @@ func (dummy *globalsStruct) DoAccess(inHeader *fission.InHeader, accessIn *fissi
 		if 1 == inHeader.NodeID {
 			errno = 0
 		} else {
-			fileInode, ok = globals.fileInodeMap[uint64(inHeader.NodeID)]
+			fileInode, ok = globals.fileInodeMap[inHeader.NodeID]
 			if ok {
 				fileInode.ensureAttrInCache()
 
@@ -619,16 +620,15 @@ func (dummy *globalsStruct) DoFAllocate(inHeader *fission.InHeader, fAllocateIn 
 
 func (dummy *globalsStruct) DoReadDirPlus(inHeader *fission.InHeader, readDirPlusIn *fission.ReadDirPlusIn) (readDirPlusOut *fission.ReadDirPlusOut, errno syscall.Errno) {
 	var (
+		asyncFillAttrWG         sync.WaitGroup
 		dirEntNameLenAligned    uint32
 		dirEntSize              uint32
 		dirEntry                *dirEntryStruct
 		dirEntryAsValue         sortedmap.Value
 		dirEntryIndex           int
 		dirEntryNameAsByteSlice []byte
-		dirEntryType            uint32
 		err                     error
 		fileInode               *fileInodeStruct
-		inodeAttr               *fission.Attr
 		numDirEntries           int
 		ok                      bool
 		totalSize               uint32
@@ -679,63 +679,98 @@ func (dummy *globalsStruct) DoReadDirPlus(inHeader *fission.InHeader, readDirPlu
 		}
 
 		if dirEntry.isRootDir {
-			dirEntryType = syscall.S_IFDIR
+			readDirPlusOut.DirEntPlus = append(readDirPlusOut.DirEntPlus, fission.DirEntPlus{
+				EntryOut: fission.EntryOut{
+					NodeID:         1,
+					Generation:     0,
+					EntryValidSec:  0,
+					AttrValidSec:   0,
+					EntryValidNSec: 0,
+					AttrValidNSec:  0,
+					Attr: fission.Attr{
+						Ino:       globals.rootDirAttr.Ino,
+						Size:      globals.rootDirAttr.Size,
+						Blocks:    globals.rootDirAttr.Blocks,
+						ATimeSec:  globals.rootDirAttr.ATimeSec,
+						MTimeSec:  globals.rootDirAttr.MTimeSec,
+						CTimeSec:  globals.rootDirAttr.CTimeSec,
+						ATimeNSec: globals.rootDirAttr.ATimeNSec,
+						MTimeNSec: globals.rootDirAttr.MTimeNSec,
+						CTimeNSec: globals.rootDirAttr.CTimeNSec,
+						Mode:      globals.rootDirAttr.Mode,
+						NLink:     globals.rootDirAttr.NLink,
+						UID:       globals.rootDirAttr.UID,
+						GID:       globals.rootDirAttr.GID,
+						RDev:      globals.rootDirAttr.RDev,
+						BlkSize:   globals.rootDirAttr.BlkSize,
+						Padding:   globals.rootDirAttr.Padding,
+					},
+				},
+				DirEnt: fission.DirEnt{
+					Ino:     1,
+					Off:     uint64(dirEntryIndex) + 1,
+					NameLen: uint32(len(dirEntryNameAsByteSlice)), // unnecessary
+					Type:    syscall.S_IFDIR,
+					Name:    dirEntryNameAsByteSlice,
+				},
+			})
 
-			inodeAttr = globals.rootDirAttr
+			fixAttr(&readDirPlusOut.DirEntPlus[len(readDirPlusOut.DirEntPlus)-1].EntryOut.Attr)
 		} else {
-			dirEntryType = syscall.S_IFREG
+			readDirPlusOut.DirEntPlus = append(readDirPlusOut.DirEntPlus, fission.DirEntPlus{
+				EntryOut: fission.EntryOut{
+					NodeID:         dirEntry.inodeNumber,
+					Generation:     0,
+					EntryValidSec:  0,
+					AttrValidSec:   0,
+					EntryValidNSec: 0,
+					AttrValidNSec:  0,
+				},
+				DirEnt: fission.DirEnt{
+					Ino:     1,
+					Off:     uint64(dirEntryIndex) + 1,
+					NameLen: uint32(len(dirEntryNameAsByteSlice)), // unnecessary
+					Type:    syscall.S_IFREG,
+					Name:    dirEntryNameAsByteSlice,
+				},
+			})
 
-			fileInode, ok = globals.fileInodeMap[uint64(dirEntry.inodeNumber)]
+			fileInode, ok = globals.fileInodeMap[dirEntry.inodeNumber]
 			if !ok {
-				fmt.Printf("globals.fileInodeMap[%v] returned !ok\n", inHeader.NodeID)
+				fmt.Printf("globals.fileInodeMap[%v] returned !ok\n", dirEntry.inodeNumber)
 				os.Exit(1)
 			}
 
-			fileInode.ensureAttrInCache()
+			asyncFillAttrWG.Add(1)
 
-			inodeAttr = fileInode.cachedAttr
+			go func(fileInode *fileInodeStruct, attr *fission.Attr, wg *sync.WaitGroup) {
+				fileInode.ensureAttrInCache()
+
+				attr.Ino = fileInode.cachedAttr.Ino
+				attr.Size = fileInode.cachedAttr.Size
+				attr.Blocks = fileInode.cachedAttr.Blocks
+				attr.ATimeSec = fileInode.cachedAttr.ATimeSec
+				attr.MTimeSec = fileInode.cachedAttr.MTimeSec
+				attr.CTimeSec = fileInode.cachedAttr.CTimeSec
+				attr.ATimeNSec = fileInode.cachedAttr.ATimeNSec
+				attr.MTimeNSec = fileInode.cachedAttr.MTimeNSec
+				attr.CTimeNSec = fileInode.cachedAttr.CTimeNSec
+				attr.Mode = fileInode.cachedAttr.Mode
+				attr.NLink = fileInode.cachedAttr.NLink
+				attr.UID = fileInode.cachedAttr.UID
+				attr.GID = fileInode.cachedAttr.GID
+				attr.RDev = fileInode.cachedAttr.RDev
+				attr.BlkSize = fileInode.cachedAttr.BlkSize
+				attr.Padding = fileInode.cachedAttr.Padding
+
+				fixAttr(attr)
+
+				wg.Done()
+			}(fileInode, &readDirPlusOut.DirEntPlus[len(readDirPlusOut.DirEntPlus)-1].EntryOut.Attr, &asyncFillAttrWG)
 		}
-
-		readDirPlusOut.DirEntPlus = append(readDirPlusOut.DirEntPlus, fission.DirEntPlus{
-			EntryOut: fission.EntryOut{
-				NodeID:         inodeAttr.Ino,
-				Generation:     0,
-				EntryValidSec:  0,
-				AttrValidSec:   0,
-				EntryValidNSec: 0,
-				AttrValidNSec:  0,
-				Attr: fission.Attr{
-					Ino:       inodeAttr.Ino,
-					Size:      inodeAttr.Size,
-					Blocks:    inodeAttr.Blocks,
-					ATimeSec:  inodeAttr.ATimeSec,
-					MTimeSec:  inodeAttr.MTimeSec,
-					CTimeSec:  inodeAttr.CTimeSec,
-					ATimeNSec: inodeAttr.ATimeNSec,
-					MTimeNSec: inodeAttr.MTimeNSec,
-					CTimeNSec: inodeAttr.CTimeNSec,
-					Mode:      inodeAttr.Mode,
-					NLink:     inodeAttr.NLink,
-					UID:       inodeAttr.UID,
-					GID:       inodeAttr.GID,
-					RDev:      inodeAttr.RDev,
-					BlkSize:   inodeAttr.BlkSize,
-					Padding:   inodeAttr.Padding,
-				},
-			},
-			DirEnt: fission.DirEnt{
-				Ino:     dirEntry.inodeNumber,
-				Off:     uint64(dirEntryIndex) + 1,
-				NameLen: uint32(len(dirEntryNameAsByteSlice)), // unnecessary
-				Type:    dirEntryType,
-				Name:    dirEntryNameAsByteSlice,
-			},
-		})
-
-		fixAttr(&readDirPlusOut.DirEntPlus[len(readDirPlusOut.DirEntPlus)-1].EntryOut.Attr)
-
-		totalSize += dirEntSize
 	}
+
+	asyncFillAttrWG.Wait()
 
 	if 0 == len(readDirPlusOut.DirEntPlus) {
 		errno = syscall.ENOENT
