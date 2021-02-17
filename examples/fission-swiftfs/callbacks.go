@@ -678,6 +678,8 @@ func (dummy *globalsStruct) DoReadDirPlus(inHeader *fission.InHeader, readDirPlu
 			return
 		}
 
+		totalSize += dirEntSize
+
 		if dirEntry.isRootDir {
 			readDirPlusOut.DirEntPlus = append(readDirPlusOut.DirEntPlus, fission.DirEntPlus{
 				EntryOut: fission.EntryOut{
