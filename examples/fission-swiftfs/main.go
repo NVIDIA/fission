@@ -60,6 +60,10 @@ const (
 
 	dirMode  = uint32(syscall.S_IFDIR | syscall.S_IRUSR | syscall.S_IXUSR | syscall.S_IRGRP | syscall.S_IXGRP | syscall.S_IROTH | syscall.S_IXOTH)
 	fileMode = uint32(syscall.S_IFREG | syscall.S_IRUSR | syscall.S_IRGRP | syscall.S_IROTH)
+
+	authModeNoAuthNeeded  = uint8(0)
+	authModeTokenProvided = uint8(1)
+	authModeURLProvided   = uint8(2)
 )
 
 type dirEntryStruct struct {
@@ -78,6 +82,9 @@ type fileInodeStruct struct {
 type configStruct struct {
 	MountPoint              string
 	ContainerURL            string
+	AuthURL                 string
+	AuthUser                string
+	AuthKey                 string
 	AuthToken               string
 	SwiftTimeout            string
 	SwiftConnectionPoolSize uint64
@@ -86,8 +93,11 @@ type configStruct struct {
 }
 
 type globalsStruct struct {
-	sync.RWMutex // Protects the read cache
+	sync.RWMutex // Protects authToken and the read cache
 	config       *configStruct
+	authMode     uint8           // One of authMode{NoAuthNeeded|TokenProvided|URLProvided}
+	authWG       *sync.WaitGroup // If nil (when authToken == ""), indicates no active getAuthToken()
+	authToken    string          // Only valid in authModeURLProvided
 	volumeName   string
 	swiftTimeout time.Duration
 	startTime    time.Time
@@ -104,37 +114,47 @@ var globals globalsStruct
 
 func main() {
 	var (
-		configFileContent []byte
-		customTransport   *http.Transport
-		defaultTransport  *http.Transport
-		dirEntry          *dirEntryStruct
-		err               error
-		fileInode         *fileInodeStruct
-		httpRequest       *http.Request
-		httpResponse      *http.Response
-		httpResponseBody  []byte
-		lastInodeNumber   uint64
-		objectName        string
-		objectNameList    []string
-		ok                bool
-		rootDirMTime      time.Time
-		rootDirMTimeNSec  uint32
-		rootDirMTimeSec   uint64
-		signalChan        chan os.Signal
+		authToken                 string
+		configFileContent         []byte
+		customTransport           *http.Transport
+		defaultTransport          *http.Transport
+		dirEntry                  *dirEntryStruct
+		err                       error
+		fileInode                 *fileInodeStruct
+		httpRequest               *http.Request
+		httpResponse              *http.Response
+		httpResponseBody          []byte
+		lastInodeNumber           uint64
+		objectName                string
+		objectNameList            []string
+		ok                        bool
+		retryAfterReAuthAttempted bool
+		rootDirMTime              time.Time
+		rootDirMTimeNSec          uint32
+		rootDirMTimeSec           uint64
+		signalChan                chan os.Signal
 	)
 
 	if 2 != len(os.Args) {
 		fmt.Printf("Usage: %s <configFile>\n", os.Args[0])
 		fmt.Printf("  where <configFile> is a JSON object of the form:\n")
 		fmt.Printf("    {\n")
-		fmt.Printf("      \"MountPoint\"              : \"<path to empty dir where the file system will be FUSE mounted>\",\n")
-		fmt.Printf("      \"ContainerURL\"            : \"<storage URL with account name set as desired and container name appended>\",\n")
+		fmt.Printf("      \"MountPoint\"              : \"<path to empty dir upon which to mount>\",\n")
+		fmt.Printf("      \"ContainerURL\"            : \"<URL to account/container to mount>\",\n")
+		fmt.Printf("      \"AuthURL\"                 : \"<URL to use during Swift Auth>\",\n")
+		fmt.Printf("      \"AuthUser\"                : \"<auth user to use during Swift Auth>\",\n")
+		fmt.Printf("      \"AuthKey\"                 : \"<auth user to use during Swift Auth>\",\n")
 		fmt.Printf("      \"AuthToken\"               : \"<auth token as returned during Swift Auth>\",\n")
 		fmt.Printf("      \"SwiftTimeout\"            : \"<time.Duration string>\",\n")
 		fmt.Printf("      \"SwiftConnectionPoolSize\" : <max # of connections to Swift>,\n")
 		fmt.Printf("      \"NumCacheLines\"           : <number of cache lines to enable>,\n")
 		fmt.Printf("      \"CacheLineSize\"           : <(max) size of each cache line>\n")
 		fmt.Printf("    }\n")
+		fmt.Printf("  Note: There are three authorization options:\n")
+		fmt.Printf("          1) If Swift auth is required, supply all of Auth{URL|User|Key|Token}\n")
+		fmt.Printf("          2) If Swift auth is already done, supply only AuthToken\n")
+		fmt.Printf("          3) If Swift Auth is not required,\n")
+		fmt.Printf("               don't supply any of Auth{URL|User|Key|Token}\n")
 		os.Exit(0)
 	}
 
@@ -151,6 +171,32 @@ func main() {
 		fmt.Printf("json.Unmarshal(configFileContent, config) failed: %v\n", err)
 		os.Exit(1)
 	}
+	if "" == globals.config.AuthURL {
+		if ("" != globals.config.AuthUser) || ("" != globals.config.AuthKey) {
+			fmt.Printf("If no AuthURL is provided, do not provide either AuthUser or AuthKey\n")
+			os.Exit(1)
+		}
+
+		if "" == globals.config.AuthToken {
+			globals.authMode = authModeNoAuthNeeded
+		} else {
+			globals.authMode = authModeTokenProvided
+		}
+	} else {
+		if ("" == globals.config.AuthUser) || ("" == globals.config.AuthKey) {
+			fmt.Printf("If AuthURL is provided, you must provide both AuthUser and AuthKey\n")
+			os.Exit(1)
+		}
+		if "" != globals.config.AuthToken {
+			fmt.Printf("If AuthURL is provided, you must not provide an AuthToken\n")
+			os.Exit(1)
+		}
+
+		globals.authMode = authModeURLProvided
+	}
+
+	globals.authWG = nil
+	globals.authToken = ""
 
 	globals.volumeName = path.Base(globals.config.MountPoint)
 
@@ -193,6 +239,10 @@ func main() {
 		Timeout:   globals.swiftTimeout,
 	}
 
+	retryAfterReAuthAttempted = false
+
+RetryAfterReAuth:
+
 	httpRequest, err = http.NewRequest("GET", globals.config.ContainerURL, nil)
 	if nil != err {
 		fmt.Printf("http.NewRequest(\"GET\", \"%s\", nil) failed: %v\n", globals.config.ContainerURL, err)
@@ -201,8 +251,9 @@ func main() {
 
 	httpRequest.Header["User-Agent"] = []string{httpUserAgent}
 
-	if "" != globals.config.AuthToken {
-		httpRequest.Header["X-Auth-Token"] = []string{globals.config.AuthToken}
+	authToken = fetchAuthToken()
+	if "" != authToken {
+		httpRequest.Header["X-Auth-Token"] = []string{authToken}
 	}
 
 	httpResponse, err = globals.httpClient.Do(httpRequest)
@@ -220,6 +271,19 @@ func main() {
 	if nil != err {
 		fmt.Printf("httpResponse.Body.Close() failed: %v\n", err)
 		os.Exit(1)
+	}
+
+	if http.StatusUnauthorized == httpResponse.StatusCode {
+		if retryAfterReAuthAttempted {
+			fmt.Printf("Re-authorization failed - exiting\n")
+			os.Exit(1)
+		}
+
+		forceReAuth()
+
+		retryAfterReAuthAttempted = true
+
+		goto RetryAfterReAuth
 	}
 
 	if (200 > httpResponse.StatusCode) || (299 < httpResponse.StatusCode) {
@@ -356,6 +420,107 @@ func main() {
 		globals.logger.Printf("fission.DoUnmount() failed: %v", err)
 		os.Exit(1)
 	}
+}
+
+func fetchAuthToken() (authToken string) {
+	var (
+		localAuthWG *sync.WaitGroup
+	)
+
+	switch globals.authMode {
+	case authModeNoAuthNeeded:
+		authToken = ""
+	case authModeTokenProvided:
+		authToken = globals.config.AuthToken
+	case authModeURLProvided:
+	Retry:
+		globals.Lock()
+		if "" == globals.authToken {
+			if nil == globals.authWG {
+				globals.authWG = &sync.WaitGroup{}
+				globals.authWG.Add(1)
+				go getAuthToken()
+			}
+			localAuthWG = globals.authWG
+			globals.Unlock()
+			localAuthWG.Wait()
+			goto Retry
+		} else {
+			authToken = globals.authToken
+			globals.Unlock()
+		}
+	}
+
+	return
+}
+
+func forceReAuth() {
+	if authModeURLProvided != globals.authMode {
+		fmt.Printf("AuthToken expired - exiting\n")
+		os.Exit(1)
+	}
+
+	globals.Lock()
+
+	if nil == globals.authWG {
+		globals.authWG = &sync.WaitGroup{}
+		globals.authToken = ""
+		go getAuthToken()
+	}
+
+	globals.Unlock()
+}
+
+func getAuthToken() {
+	var (
+		err          error
+		httpRequest  *http.Request
+		httpResponse *http.Response
+		localAuthWG  *sync.WaitGroup
+	)
+
+	httpRequest, err = http.NewRequest("GET", globals.config.AuthURL, nil)
+	if nil != err {
+		fmt.Printf("http.NewRequest(\"GET\", \"%s\", nil) failed: %v\n", globals.config.AuthURL, err)
+		os.Exit(1)
+	}
+
+	httpRequest.Header["User-Agent"] = []string{httpUserAgent}
+	httpRequest.Header["X-Auth-User"] = []string{globals.config.AuthUser}
+	httpRequest.Header["X-Auth-Key"] = []string{globals.config.AuthKey}
+
+	httpResponse, err = globals.httpClient.Do(httpRequest)
+	if nil != err {
+		fmt.Printf("globals.httpClient.Do(GET %s) failed: %v\n", globals.config.AuthURL, err)
+		os.Exit(1)
+	}
+
+	_, err = ioutil.ReadAll(httpResponse.Body)
+	if nil != err {
+		fmt.Printf("ioutil.ReadAll(httpResponse.Body) failed: %v\n", err)
+		os.Exit(1)
+	}
+	err = httpResponse.Body.Close()
+	if nil != err {
+		fmt.Printf("httpResponse.Body.Close() failed: %v\n", err)
+		os.Exit(1)
+	}
+
+	if http.StatusOK != httpResponse.StatusCode {
+		fmt.Printf("globals.httpClient.Do(GET %s) returned unexpected Status: %s\n", globals.config.AuthURL, httpResponse.Status)
+		os.Exit(1)
+	}
+
+	globals.Lock()
+
+	localAuthWG = globals.authWG
+
+	globals.authWG = nil
+	globals.authToken = httpResponse.Header.Get("X-Auth-Token")
+
+	globals.Unlock()
+
+	localAuthWG.Done()
 }
 
 func goTimeToUnixTime(goTime time.Time) (unixTimeSec uint64, unixTimeNSec uint32) {

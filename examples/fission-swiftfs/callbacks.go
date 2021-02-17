@@ -19,14 +19,16 @@ import (
 
 func (fileInode *fileInodeStruct) ensureAttrInCache() {
 	var (
-		contentLength uint64
-		err           error
-		httpRequest   *http.Request
-		httpResponse  *http.Response
-		mTime         time.Time
-		mTimeNSec     uint32
-		mTimeSec      uint64
-		objectURL     string
+		authToken                 string
+		contentLength             uint64
+		err                       error
+		httpRequest               *http.Request
+		httpResponse              *http.Response
+		mTime                     time.Time
+		mTimeNSec                 uint32
+		mTimeSec                  uint64
+		objectURL                 string
+		retryAfterReAuthAttempted bool
 	)
 
 	fileInode.RLock()
@@ -47,6 +49,10 @@ func (fileInode *fileInodeStruct) ensureAttrInCache() {
 
 	objectURL = globals.config.ContainerURL + "/" + fileInode.objectName
 
+	retryAfterReAuthAttempted = false
+
+RetryAfterReAuth:
+
 	httpRequest, err = http.NewRequest("HEAD", objectURL, nil)
 	if nil != err {
 		fmt.Printf("http.NewRequest(\"HEAD\", \"%s\", nil) failed: %v\n", objectURL, err)
@@ -55,8 +61,9 @@ func (fileInode *fileInodeStruct) ensureAttrInCache() {
 
 	httpRequest.Header["User-Agent"] = []string{httpUserAgent}
 
-	if "" != globals.config.AuthToken {
-		httpRequest.Header["X-Auth-Token"] = []string{globals.config.AuthToken}
+	authToken = fetchAuthToken()
+	if "" != authToken {
+		httpRequest.Header["X-Auth-Token"] = []string{authToken}
 	}
 
 	httpResponse, err = globals.httpClient.Do(httpRequest)
@@ -74,6 +81,19 @@ func (fileInode *fileInodeStruct) ensureAttrInCache() {
 	if nil != err {
 		fmt.Printf("httpResponse.Body.Close() failed: %v\n", err)
 		os.Exit(1)
+	}
+
+	if http.StatusUnauthorized == httpResponse.StatusCode {
+		if retryAfterReAuthAttempted {
+			fmt.Printf("Re-authorization failed - exiting\n")
+			os.Exit(1)
+		}
+
+		forceReAuth()
+
+		retryAfterReAuthAttempted = true
+
+		goto RetryAfterReAuth
 	}
 
 	if (200 > httpResponse.StatusCode) || (299 < httpResponse.StatusCode) {

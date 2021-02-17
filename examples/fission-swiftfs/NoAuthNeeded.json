@@ -1,0 +1,12 @@
+{
+  "MountPoint"              : "MountPoint",
+  "ContainerURL"            : "http://127.0.0.1:8090/v1/AUTH_test/C",
+  "AuthURL"                 : "",
+  "AuthUser"                : "",
+  "AuthKey"                 : "",
+  "AuthToken"               : "",
+  "SwiftTimeout"            : "10m",
+  "SwiftConnectionPoolSize" : 100,
+  "NumCacheLines"           : 1024,
+  "CacheLineSize"           : 1048576
+}
