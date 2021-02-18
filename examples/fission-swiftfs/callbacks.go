@@ -4,6 +4,7 @@
 package main
 
 import (
+	"container/list"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -337,31 +338,170 @@ func (dummy *globalsStruct) DoOpen(inHeader *fission.InHeader, openIn *fission.O
 }
 
 func (dummy *globalsStruct) DoRead(inHeader *fission.InHeader, readIn *fission.ReadIn) (readOut *fission.ReadOut, errno syscall.Errno) {
-	// TODO: Implement DoRead()
+	var (
+		authToken                     string
+		cacheLine                     *cacheLineStruct
+		cacheLineBufLimitOffset       uint64
+		cacheLineBufStartingOffset    uint64
+		cacheLineObjectLimitOffset    uint64
+		cacheLineObjectStartingOffset uint64
+		cacheLineTag                  cacheLineTagStruct
+		err                           error
+		fileCurrentOffset             uint64
+		fileInode                     *fileInodeStruct
+		fileLimitOffset               uint64
+		httpRequest                   *http.Request
+		httpResponse                  *http.Response
+		objectOffsetStart             uint64
+		objectOffsetLimit             uint64
+		listElement                   *list.Element
+		objectURL                     string
+		ok                            bool
+		retryAfterReAuthAttempted     bool
+	)
 
-	// if helloInodeIno != inHeader.NodeID {
-	// 	errno = syscall.ENOENT
-	// 	return
-	// }
+	fileInode, ok = globals.fileInodeMap[inHeader.NodeID]
+	if !ok {
+		errno = syscall.ENOENT
+		return
+	}
 
-	// var (
-	// 	adjustedOffset uint64
-	// 	adjustedSize   uint32
-	// )
+	fileInode.ensureAttrInCache()
 
-	// adjustedOffset = uint64(len(helloInodeFileData))
-	// if readIn.Offset < adjustedOffset {
-	// 	adjustedOffset = readIn.Offset
-	// }
+	fileCurrentOffset = readIn.Offset
+	if fileCurrentOffset > fileInode.cachedAttr.Size {
+		fileCurrentOffset = fileInode.cachedAttr.Size
+	}
 
-	// adjustedSize = readIn.Size
-	// if (adjustedOffset + uint64(adjustedSize)) > uint64(len(helloInodeFileData)) {
-	// 	adjustedSize = uint32(len(helloInodeFileData)) - uint32(adjustedOffset)
-	// }
+	fileLimitOffset = fileCurrentOffset + uint64(readIn.Size)
+	if fileLimitOffset > fileInode.cachedAttr.Size {
+		fileLimitOffset = fileInode.cachedAttr.Size
+	}
 
-	// readOut = &fission.ReadOut{
-	// 	Data: cloneByteSlice(helloInodeFileData[adjustedOffset:(adjustedOffset + uint64(adjustedSize))]),
-	// }
+	objectURL = globals.config.ContainerURL + "/" + fileInode.objectName
+
+	readOut = &fission.ReadOut{
+		Data: make([]byte, 0, readIn.Size),
+	}
+
+	for fileCurrentOffset < fileLimitOffset {
+		cacheLineTag.inodeNumber = fileInode.inodeNumber
+		cacheLineTag.lineNumber = (fileCurrentOffset + globals.config.CacheLineSize - 1) / globals.config.CacheLineSize
+
+		globals.Lock()
+
+		cacheLine, ok = globals.readCacheMap[cacheLineTag]
+
+		if ok {
+			globals.readCacheLRU.MoveToBack(cacheLine.listElement)
+
+			globals.Unlock()
+
+			cacheLine.Wait()
+		} else {
+			for uint64(globals.readCacheLRU.Len()) >= globals.config.NumCacheLines {
+				listElement = globals.readCacheLRU.Front()
+				cacheLine, ok = listElement.Value.(*cacheLineStruct)
+				if !ok {
+					fmt.Printf("cacheLine, ok = listElement.Value.(*cacheLineStruct) returned !ok\n")
+					os.Exit(1)
+				}
+
+				_ = globals.readCacheLRU.Remove(listElement)
+				delete(globals.readCacheMap, cacheLine.tag)
+			}
+
+			cacheLine = &cacheLineStruct{
+				tag: cacheLineTag,
+				buf: nil,
+			}
+
+			cacheLine.Add(1)
+
+			cacheLine.listElement = globals.readCacheLRU.PushBack(cacheLine)
+			globals.readCacheMap[cacheLineTag] = cacheLine
+
+			globals.Unlock()
+
+			retryAfterReAuthAttempted = false
+
+		RetryAfterReAuth:
+
+			httpRequest, err = http.NewRequest("GET", objectURL, nil)
+			if nil != err {
+				fmt.Printf("http.NewRequest(\"GET\", \"%s\", nil) failed: %v\n", objectURL, err)
+				os.Exit(1)
+			}
+
+			httpRequest.Header["User-Agent"] = []string{httpUserAgent}
+
+			authToken = fetchAuthToken()
+			if "" != authToken {
+				httpRequest.Header["X-Auth-Token"] = []string{authToken}
+			}
+
+			objectOffsetStart = cacheLine.tag.lineNumber * globals.config.CacheLineSize
+
+			objectOffsetLimit = objectOffsetStart + globals.config.CacheLineSize
+			if objectOffsetLimit > fileInode.cachedAttr.Size {
+				objectOffsetLimit = fileInode.cachedAttr.Size
+			}
+
+			httpRequest.Header["Range"] = []string{fmt.Sprintf("bytes=%d-%d", objectOffsetStart, objectOffsetLimit-1)}
+
+			httpResponse, err = globals.httpClient.Do(httpRequest)
+			if nil != err {
+				fmt.Printf("globals.httpClient.Do(GET %s) failed: %v\n", objectURL, err)
+				os.Exit(1)
+			}
+
+			cacheLine.buf, err = ioutil.ReadAll(httpResponse.Body)
+			if nil != err {
+				fmt.Printf("ioutil.ReadAll(httpResponse.Body) failed: %v\n", err)
+				os.Exit(1)
+			}
+			err = httpResponse.Body.Close()
+			if nil != err {
+				fmt.Printf("httpResponse.Body.Close() failed: %v\n", err)
+				os.Exit(1)
+			}
+
+			if http.StatusUnauthorized == httpResponse.StatusCode {
+				if retryAfterReAuthAttempted {
+					fmt.Printf("Re-authorization failed - exiting\n")
+					os.Exit(1)
+				}
+
+				forceReAuth()
+
+				retryAfterReAuthAttempted = true
+
+				goto RetryAfterReAuth
+			}
+
+			if (200 > httpResponse.StatusCode) || (299 < httpResponse.StatusCode) {
+				fmt.Printf("globals.httpClient.Do(GET %s) returned unexpected Status: %s\n", objectURL, httpResponse.Status)
+				os.Exit(1)
+			}
+
+			cacheLine.Done()
+		}
+
+		cacheLineObjectStartingOffset = cacheLine.tag.lineNumber * globals.config.CacheLineSize
+		cacheLineObjectLimitOffset = cacheLineObjectStartingOffset + uint64(len(cacheLine.buf))
+
+		cacheLineBufStartingOffset = fileCurrentOffset - cacheLineObjectStartingOffset
+
+		if cacheLineObjectLimitOffset > fileLimitOffset {
+			cacheLineBufLimitOffset = cacheLineBufStartingOffset + (fileLimitOffset - fileCurrentOffset)
+		} else {
+			cacheLineBufLimitOffset = uint64(len(cacheLine.buf))
+		}
+
+		readOut.Data = append(readOut.Data, cacheLine.buf[cacheLineBufStartingOffset:cacheLineBufLimitOffset]...)
+
+		fileCurrentOffset += cacheLineBufLimitOffset - cacheLineBufStartingOffset
+	}
 
 	errno = 0
 	return

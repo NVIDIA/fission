@@ -4,6 +4,7 @@
 package main
 
 import (
+	"container/list"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -66,19 +67,6 @@ const (
 	authModeURLProvided   = uint8(2)
 )
 
-type dirEntryStruct struct {
-	name        string // Either ".", "..", or fileInodeStruct.objectName
-	inodeNumber uint64 // If name is "." or "..", then 1; otherwise fileInodeStruct.inodeNumber
-	isRootDir   bool   // if name is "." or "..", then true; othersize false
-}
-
-type fileInodeStruct struct {
-	sync.RWMutex        // Protects the cachedAttr
-	objectName   string // No hard link support... so this is 1:1 mapped
-	inodeNumber  uint64 // Will match cachedAttr.Ino if available
-	cachedAttr   *fission.Attr
-}
-
 type configStruct struct {
 	MountPoint              string
 	ContainerURL            string
@@ -92,8 +80,33 @@ type configStruct struct {
 	CacheLineSize           uint64
 }
 
+type dirEntryStruct struct {
+	name        string // Either ".", "..", or fileInodeStruct.objectName
+	inodeNumber uint64 // If name is "." or "..", then 1; otherwise fileInodeStruct.inodeNumber
+	isRootDir   bool   // if name is "." or "..", then true; othersize false
+}
+
+type fileInodeStruct struct {
+	sync.RWMutex        // Protects the cachedAttr
+	objectName   string // No hard link support... so this is 1:1 mapped
+	inodeNumber  uint64 // Will match cachedAttr.Ino if available
+	cachedAttr   *fission.Attr
+}
+
+type cacheLineTagStruct struct {
+	inodeNumber uint64
+	lineNumber  uint64 // # within those for the corresponding inodeNumber
+}
+
+type cacheLineStruct struct {
+	sync.WaitGroup
+	listElement *list.Element
+	tag         cacheLineTagStruct
+	buf         []byte // len() <= globals.config.CacheLineSize
+}
+
 type globalsStruct struct {
-	sync.RWMutex // Protects authToken and the read cache
+	sync.Mutex   // Protects authToken and the read cache
 	config       *configStruct
 	authMode     uint8           // One of authMode{NoAuthNeeded|TokenProvided|URLProvided}
 	authWG       *sync.WaitGroup // If nil (when authToken == ""), indicates no active getAuthToken()
@@ -103,8 +116,10 @@ type globalsStruct struct {
 	startTime    time.Time
 	httpClient   *http.Client
 	rootDirAttr  *fission.Attr
-	rootDirMap   sortedmap.LLRBTree          // key=dirEntryStruct.name; value=*dirEntryStruct
-	fileInodeMap map[uint64]*fileInodeStruct // key=fileInodeStruct.inodeNumber; value=*fileInodeStruct
+	rootDirMap   sortedmap.LLRBTree                      // key=dirEntryStruct.name; value=*dirEntryStruct
+	fileInodeMap map[uint64]*fileInodeStruct             // key=fileInodeStruct.inodeNumber; value=*fileInodeStruct
+	readCacheLRU *list.List                              // cacheLineStruct.listElement linked LRU
+	readCacheMap map[cacheLineTagStruct]*cacheLineStruct // key=cacheLineStruct.tag; value=*cacheLineStruct
 	logger       *log.Logger
 	errChan      chan error
 	volume       fission.Volume
@@ -392,6 +407,9 @@ RetryAfterReAuth:
 		globals.fileInodeMap[fileInode.inodeNumber] = fileInode
 	}
 
+	globals.readCacheLRU = list.New()
+	globals.readCacheMap = make(map[cacheLineTagStruct]*cacheLineStruct)
+
 	globals.logger = log.New(os.Stdout, "", log.Ldate|log.Ltime) // |log.Lmicroseconds|log.Lshortfile
 
 	globals.errChan = make(chan error, 1)
@@ -433,7 +451,7 @@ func fetchAuthToken() (authToken string) {
 	case authModeTokenProvided:
 		authToken = globals.config.AuthToken
 	case authModeURLProvided:
-	Retry:
+	RetryGetAuthTokenWait:
 		globals.Lock()
 		if "" == globals.authToken {
 			if nil == globals.authWG {
@@ -444,7 +462,7 @@ func fetchAuthToken() (authToken string) {
 			localAuthWG = globals.authWG
 			globals.Unlock()
 			localAuthWG.Wait()
-			goto Retry
+			goto RetryGetAuthTokenWait
 		} else {
 			authToken = globals.authToken
 			globals.Unlock()
