@@ -339,25 +339,25 @@ func (dummy *globalsStruct) DoOpen(inHeader *fission.InHeader, openIn *fission.O
 
 func (dummy *globalsStruct) DoRead(inHeader *fission.InHeader, readIn *fission.ReadIn) (readOut *fission.ReadOut, errno syscall.Errno) {
 	var (
-		authToken                     string
-		cacheLine                     *cacheLineStruct
-		cacheLineBufLimitOffset       uint64
-		cacheLineBufStartingOffset    uint64
-		cacheLineObjectLimitOffset    uint64
-		cacheLineObjectStartingOffset uint64
-		cacheLineTag                  cacheLineTagStruct
-		err                           error
-		fileCurrentOffset             uint64
-		fileInode                     *fileInodeStruct
-		fileLimitOffset               uint64
-		httpRequest                   *http.Request
-		httpResponse                  *http.Response
-		objectOffsetStart             uint64
-		objectOffsetLimit             uint64
-		listElement                   *list.Element
-		objectURL                     string
-		ok                            bool
-		retryAfterReAuthAttempted     bool
+		authToken                  string
+		cacheLine                  *cacheLineStruct
+		cacheLineBufLimitOffset    uint64
+		cacheLineBufStartOffset    uint64
+		cacheLineObjectLimitOffset uint64
+		cacheLineObjectStartOffset uint64
+		cacheLineTag               cacheLineTagStruct
+		err                        error
+		fileCurrentOffset          uint64
+		fileInode                  *fileInodeStruct
+		fileLimitOffset            uint64
+		httpRequest                *http.Request
+		httpResponse               *http.Response
+		objectOffsetStart          uint64
+		objectOffsetLimit          uint64
+		listElement                *list.Element
+		objectURL                  string
+		ok                         bool
+		retryAfterReAuthAttempted  bool
 	)
 
 	fileInode, ok = globals.fileInodeMap[inHeader.NodeID]
@@ -386,7 +386,7 @@ func (dummy *globalsStruct) DoRead(inHeader *fission.InHeader, readIn *fission.R
 
 	for fileCurrentOffset < fileLimitOffset {
 		cacheLineTag.inodeNumber = fileInode.inodeNumber
-		cacheLineTag.lineNumber = (fileCurrentOffset + globals.config.CacheLineSize - 1) / globals.config.CacheLineSize
+		cacheLineTag.lineNumber = fileCurrentOffset / globals.config.CacheLineSize
 
 		globals.Lock()
 
@@ -487,20 +487,20 @@ func (dummy *globalsStruct) DoRead(inHeader *fission.InHeader, readIn *fission.R
 			cacheLine.Done()
 		}
 
-		cacheLineObjectStartingOffset = cacheLine.tag.lineNumber * globals.config.CacheLineSize
-		cacheLineObjectLimitOffset = cacheLineObjectStartingOffset + uint64(len(cacheLine.buf))
+		cacheLineObjectStartOffset = cacheLine.tag.lineNumber * globals.config.CacheLineSize
+		cacheLineObjectLimitOffset = cacheLineObjectStartOffset + uint64(len(cacheLine.buf))
 
-		cacheLineBufStartingOffset = fileCurrentOffset - cacheLineObjectStartingOffset
+		cacheLineBufStartOffset = fileCurrentOffset - cacheLineObjectStartOffset
 
 		if cacheLineObjectLimitOffset > fileLimitOffset {
-			cacheLineBufLimitOffset = cacheLineBufStartingOffset + (fileLimitOffset - fileCurrentOffset)
+			cacheLineBufLimitOffset = cacheLineBufStartOffset + (fileLimitOffset - fileCurrentOffset)
 		} else {
 			cacheLineBufLimitOffset = uint64(len(cacheLine.buf))
 		}
 
-		readOut.Data = append(readOut.Data, cacheLine.buf[cacheLineBufStartingOffset:cacheLineBufLimitOffset]...)
+		readOut.Data = append(readOut.Data, cacheLine.buf[cacheLineBufStartOffset:cacheLineBufLimitOffset]...)
 
-		fileCurrentOffset += cacheLineBufLimitOffset - cacheLineBufStartingOffset
+		fileCurrentOffset += cacheLineBufLimitOffset - cacheLineBufStartOffset
 	}
 
 	errno = 0
