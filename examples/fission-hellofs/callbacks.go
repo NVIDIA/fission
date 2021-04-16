@@ -469,3 +469,15 @@ func (dummy *globalsStruct) DoLSeek(inHeader *fission.InHeader, lSeekIn *fission
 	errno = syscall.ENOSYS
 	return
 }
+
+func fixAttrSizes(attr *fission.Attr) {
+	if syscall.S_IFREG == (attr.Mode & syscall.S_IFMT) {
+		attr.Blocks = attr.Size + (uint64(attrBlkSize) - 1)
+		attr.Blocks /= uint64(attrBlkSize)
+		attr.BlkSize = attrBlkSize
+	} else {
+		attr.Size = 0
+		attr.Blocks = 0
+		attr.BlkSize = 0
+	}
+}

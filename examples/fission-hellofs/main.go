@@ -36,7 +36,7 @@ const (
 	initOutCongestionThreshhold = uint16(0)
 	initOutMaxWrite             = uint32(128 * 1024) // 128KiB... the max write size in Linux FUSE at this time
 
-	attrBlkSize = 4096
+	attrBlkSize = uint32(512)
 
 	accessROK = syscall.S_IROTH // surprisingly not defined as syscall.R_OK
 	accessWOK = syscall.S_IWOTH // surprisingly not defined as syscall.W_OK
@@ -102,8 +102,6 @@ func main() {
 
 	globals.rootInodeAttr = &fission.Attr{
 		Ino:       rootInodeIno,
-		Size:      0,
-		Blocks:    0,
 		ATimeSec:  unixTimeNowSec,
 		MTimeSec:  unixTimeNowSec,
 		CTimeSec:  unixTimeNowSec,
@@ -115,14 +113,14 @@ func main() {
 		UID:       0,
 		GID:       0,
 		RDev:      0,
-		BlkSize:   attrBlkSize,
 		Padding:   0,
 	}
+
+	fixAttrSizes(globals.rootInodeAttr)
 
 	globals.helloInodeAttr = &fission.Attr{
 		Ino:       helloInodeIno,
 		Size:      uint64(len(helloInodeFileData)),
-		Blocks:    1,
 		ATimeSec:  unixTimeNowSec,
 		MTimeSec:  unixTimeNowSec,
 		CTimeSec:  unixTimeNowSec,
@@ -134,9 +132,10 @@ func main() {
 		UID:       0,
 		GID:       0,
 		RDev:      0,
-		BlkSize:   attrBlkSize,
 		Padding:   0,
 	}
+
+	fixAttrSizes(globals.helloInodeAttr)
 
 	globals.dirEnt = []fission.DirEnt{
 		fission.DirEnt{

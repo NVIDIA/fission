@@ -39,7 +39,7 @@ const (
 	initOutCongestionThreshhold = uint16(0)
 	initOutMaxWrite             = uint32(128 * 1024) // 128KiB... the max write size in Linux FUSE at this time
 
-	attrBlkSize = uint32(4096)
+	attrBlkSize = uint32(512)
 
 	entryValidSec  = uint64(10)
 	entryValidNSec = uint32(0)
@@ -138,8 +138,6 @@ func main() {
 		tryLock: makeTryLock(),
 		attr: fission.Attr{
 			Ino:       1,
-			Size:      0,
-			Blocks:    0,
 			ATimeSec:  unixTimeNowSec,
 			MTimeSec:  unixTimeNowSec,
 			CTimeSec:  unixTimeNowSec,
@@ -151,7 +149,6 @@ func main() {
 			UID:       0,
 			GID:       0,
 			RDev:      0,
-			BlkSize:   attrBlkSize,
 			Padding:   0,
 		},
 		xattrMap:    sortedmap.NewLLRBTree(sortedmap.CompareByteSlice, globals.xattrMapDummy),
@@ -159,6 +156,8 @@ func main() {
 		fileData:    nil,
 		symlinkData: nil,
 	}
+
+	fixAttrSizes(&rootInode.attr)
 
 	ok, err = rootInode.dirEntryMap.Put([]byte("."), uint64(1))
 	if nil != err {

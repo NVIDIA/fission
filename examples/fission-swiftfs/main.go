@@ -42,7 +42,7 @@ const (
 	initOutCongestionThreshhold = uint16(0)
 	initOutMaxWrite             = uint32(128 * 1024) // 128KiB... the max write size in Linux FUSE at this time
 
-	attrBlkSize = uint32(4096)
+	attrBlkSize = uint32(512)
 
 	entryValidSec  = uint64(10)
 	entryValidNSec = uint32(0)
@@ -316,7 +316,6 @@ RetryAfterReAuth:
 	globals.rootDirAttr = &fission.Attr{
 		Ino:       1,
 		Size:      0,
-		Blocks:    0,
 		ATimeSec:  rootDirMTimeSec,
 		MTimeSec:  rootDirMTimeSec,
 		CTimeSec:  rootDirMTimeSec,
@@ -328,7 +327,6 @@ RetryAfterReAuth:
 		UID:       0,
 		GID:       0,
 		RDev:      0,
-		BlkSize:   attrBlkSize,
 		Padding:   0,
 	}
 

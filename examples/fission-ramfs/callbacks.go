@@ -84,7 +84,6 @@ Restart:
 			Attr: fission.Attr{
 				Ino:       dirEntInode.attr.Ino,
 				Size:      dirEntInode.attr.Size,
-				Blocks:    dirEntInode.attr.Blocks,
 				ATimeSec:  dirEntInode.attr.ATimeSec,
 				MTimeSec:  dirEntInode.attr.MTimeSec,
 				CTimeSec:  dirEntInode.attr.CTimeSec,
@@ -96,11 +95,12 @@ Restart:
 				UID:       dirEntInode.attr.UID,
 				GID:       dirEntInode.attr.GID,
 				RDev:      dirEntInode.attr.RDev,
-				BlkSize:   attrBlkSize,
 				Padding:   dirEntInode.attr.Padding,
 			},
 		},
 	}
+
+	fixAttrSizes(&lookupOut.EntryOut.Attr)
 
 	grantedLockSet.freeAll(false)
 
@@ -145,7 +145,6 @@ Restart:
 		Attr: fission.Attr{
 			Ino:       inode.attr.Ino,
 			Size:      inode.attr.Size,
-			Blocks:    inode.attr.Blocks,
 			ATimeSec:  inode.attr.ATimeSec,
 			MTimeSec:  inode.attr.MTimeSec,
 			CTimeSec:  inode.attr.CTimeSec,
@@ -157,10 +156,11 @@ Restart:
 			UID:       inode.attr.UID,
 			GID:       inode.attr.GID,
 			RDev:      inode.attr.RDev,
-			BlkSize:   attrBlkSize,
 			Padding:   inode.attr.Padding,
 		},
 	}
+
+	fixAttrSizes(&getAttrOut.Attr)
 
 	grantedLockSet.freeAll(false)
 
@@ -272,7 +272,6 @@ Restart:
 		Attr: fission.Attr{
 			Ino:       inode.attr.Ino,
 			Size:      inode.attr.Size,
-			Blocks:    inode.attr.Blocks,
 			ATimeSec:  inode.attr.ATimeSec,
 			MTimeSec:  inode.attr.MTimeSec,
 			CTimeSec:  inode.attr.CTimeSec,
@@ -284,10 +283,11 @@ Restart:
 			UID:       inode.attr.UID,
 			GID:       inode.attr.GID,
 			RDev:      inode.attr.RDev,
-			BlkSize:   attrBlkSize,
 			Padding:   inode.attr.Padding,
 		},
 	}
+
+	fixAttrSizes(&setAttrOut.Attr)
 
 	grantedLockSet.freeAll(false)
 
@@ -393,8 +393,6 @@ Restart:
 		tryLock: makeTryLock(),
 		attr: fission.Attr{
 			Ino:       globals.lastNodeID,
-			Size:      0,
-			Blocks:    0,
 			ATimeSec:  unixTimeNowSec,
 			MTimeSec:  unixTimeNowSec,
 			CTimeSec:  unixTimeNowSec,
@@ -406,7 +404,6 @@ Restart:
 			UID:       inHeader.UID,
 			GID:       inHeader.GID,
 			RDev:      0,
-			BlkSize:   attrBlkSize,
 			Padding:   0,
 		},
 		xattrMap:    sortedmap.NewLLRBTree(sortedmap.CompareByteSlice, globals.xattrMapDummy),
@@ -414,6 +411,8 @@ Restart:
 		fileData:    nil,
 		symlinkData: symLinkIn.Data,
 	}
+
+	fixAttrSizes(&dirEntInode.attr)
 
 	ok, err = dirInode.dirEntryMap.Put(symLinkIn.Name, dirEntInode.attr.Ino)
 	if nil != err {
@@ -437,8 +436,6 @@ Restart:
 			AttrValidNSec:  attrValidNSec,
 			Attr: fission.Attr{
 				Ino:       dirEntInode.attr.Ino,
-				Size:      dirEntInode.attr.Size,
-				Blocks:    dirEntInode.attr.Blocks,
 				ATimeSec:  dirEntInode.attr.ATimeSec,
 				MTimeSec:  dirEntInode.attr.MTimeSec,
 				CTimeSec:  dirEntInode.attr.CTimeSec,
@@ -450,11 +447,12 @@ Restart:
 				UID:       dirEntInode.attr.UID,
 				GID:       dirEntInode.attr.GID,
 				RDev:      dirEntInode.attr.RDev,
-				BlkSize:   attrBlkSize,
 				Padding:   dirEntInode.attr.Padding,
 			},
 		},
 	}
+
+	fixAttrSizes(&symLinkOut.EntryOut.Attr)
 
 	grantedLockSet.freeAll(false)
 
@@ -527,8 +525,6 @@ Restart:
 		tryLock: makeTryLock(),
 		attr: fission.Attr{
 			Ino:       globals.lastNodeID,
-			Size:      0,
-			Blocks:    0,
 			ATimeSec:  unixTimeNowSec,
 			MTimeSec:  unixTimeNowSec,
 			CTimeSec:  unixTimeNowSec,
@@ -540,7 +536,6 @@ Restart:
 			UID:       inHeader.UID,
 			GID:       inHeader.GID,
 			RDev:      0,
-			BlkSize:   attrBlkSize,
 			Padding:   0,
 		},
 		xattrMap:    sortedmap.NewLLRBTree(sortedmap.CompareByteSlice, globals.xattrMapDummy),
@@ -548,6 +543,8 @@ Restart:
 		fileData:    nil,
 		symlinkData: nil,
 	}
+
+	fixAttrSizes(&dirEntInode.attr)
 
 	ok, err = dirEntInode.dirEntryMap.Put([]byte("."), dirEntInode.attr.Ino)
 	if nil != err {
@@ -591,8 +588,6 @@ Restart:
 			AttrValidNSec:  attrValidNSec,
 			Attr: fission.Attr{
 				Ino:       dirEntInode.attr.Ino,
-				Size:      dirEntInode.attr.Size,
-				Blocks:    dirEntInode.attr.Blocks,
 				ATimeSec:  dirEntInode.attr.ATimeSec,
 				MTimeSec:  dirEntInode.attr.MTimeSec,
 				CTimeSec:  dirEntInode.attr.CTimeSec,
@@ -604,11 +599,12 @@ Restart:
 				UID:       dirEntInode.attr.UID,
 				GID:       dirEntInode.attr.GID,
 				RDev:      dirEntInode.attr.RDev,
-				BlkSize:   attrBlkSize,
 				Padding:   dirEntInode.attr.Padding,
 			},
 		},
 	}
+
+	fixAttrSizes(&mkDirOut.EntryOut.Attr)
 
 	grantedLockSet.freeAll(false)
 
@@ -1097,7 +1093,6 @@ Restart:
 			Attr: fission.Attr{
 				Ino:       oldInode.attr.Ino,
 				Size:      oldInode.attr.Size,
-				Blocks:    oldInode.attr.Blocks,
 				ATimeSec:  oldInode.attr.ATimeSec,
 				MTimeSec:  oldInode.attr.MTimeSec,
 				CTimeSec:  oldInode.attr.CTimeSec,
@@ -1109,11 +1104,12 @@ Restart:
 				UID:       oldInode.attr.UID,
 				GID:       oldInode.attr.GID,
 				RDev:      oldInode.attr.RDev,
-				BlkSize:   attrBlkSize,
 				Padding:   oldInode.attr.Padding,
 			},
 		},
 	}
+
+	fixAttrSizes(&linkOut.EntryOut.Attr)
 
 	grantedLockSet.freeAll(false)
 
@@ -2144,7 +2140,6 @@ Restart:
 		attr: fission.Attr{
 			Ino:       globals.lastNodeID,
 			Size:      0,
-			Blocks:    0,
 			ATimeSec:  unixTimeNowSec,
 			MTimeSec:  unixTimeNowSec,
 			CTimeSec:  unixTimeNowSec,
@@ -2156,7 +2151,6 @@ Restart:
 			UID:       inHeader.UID,
 			GID:       inHeader.GID,
 			RDev:      0,
-			BlkSize:   attrBlkSize,
 			Padding:   0,
 		},
 		xattrMap:    sortedmap.NewLLRBTree(sortedmap.CompareByteSlice, globals.xattrMapDummy),
@@ -2164,6 +2158,8 @@ Restart:
 		fileData:    make([]byte, 0),
 		symlinkData: nil,
 	}
+
+	fixAttrSizes(&fileInode.attr)
 
 	ok, err = dirInode.dirEntryMap.Put(createIn.Name, fileInode.attr.Ino)
 	if nil != err {
@@ -2188,7 +2184,6 @@ Restart:
 			Attr: fission.Attr{
 				Ino:       fileInode.attr.Ino,
 				Size:      fileInode.attr.Size,
-				Blocks:    fileInode.attr.Blocks,
 				ATimeSec:  fileInode.attr.ATimeSec,
 				MTimeSec:  fileInode.attr.MTimeSec,
 				CTimeSec:  fileInode.attr.CTimeSec,
@@ -2200,7 +2195,6 @@ Restart:
 				UID:       fileInode.attr.UID,
 				GID:       fileInode.attr.GID,
 				RDev:      fileInode.attr.RDev,
-				BlkSize:   attrBlkSize,
 				Padding:   fileInode.attr.Padding,
 			},
 		},
@@ -2208,6 +2202,8 @@ Restart:
 		OpenFlags: fission.FOpenResponseDirectIO,
 		Padding:   0,
 	}
+
+	fixAttrSizes(&createOut.EntryOut.Attr)
 
 	grantedLockSet.freeAll(false)
 
@@ -2346,7 +2342,6 @@ Restart:
 				Attr: fission.Attr{
 					Ino:       dirEntInode.attr.Ino,
 					Size:      dirEntInode.attr.Size,
-					Blocks:    dirEntInode.attr.Blocks,
 					ATimeSec:  dirEntInode.attr.ATimeSec,
 					MTimeSec:  dirEntInode.attr.MTimeSec,
 					CTimeSec:  dirEntInode.attr.CTimeSec,
@@ -2358,7 +2353,6 @@ Restart:
 					UID:       dirEntInode.attr.UID,
 					GID:       dirEntInode.attr.GID,
 					RDev:      dirEntInode.attr.RDev,
-					BlkSize:   attrBlkSize,
 					Padding:   dirEntInode.attr.Padding,
 				},
 			},
@@ -2370,6 +2364,8 @@ Restart:
 				Name:    cloneByteSlice(dirEntNameAsByteSlice),
 			},
 		}
+
+		fixAttrSizes(&readDirPlusOut.DirEntPlus[dirEntPlusIndex].EntryOut.Attr)
 	}
 
 	grantedLockSet.freeAll(false)
@@ -2613,4 +2609,16 @@ Restart:
 func (dummy *globalsStruct) DoLSeek(inHeader *fission.InHeader, lSeekIn *fission.LSeekIn) (lSeekOut *fission.LSeekOut, errno syscall.Errno) {
 	errno = syscall.ENOSYS
 	return
+}
+
+func fixAttrSizes(attr *fission.Attr) {
+	if syscall.S_IFREG == (attr.Mode & syscall.S_IFMT) {
+		attr.Blocks = attr.Size + (uint64(attrBlkSize) - 1)
+		attr.Blocks /= uint64(attrBlkSize)
+		attr.BlkSize = attrBlkSize
+	} else {
+		attr.Size = 0
+		attr.Blocks = 0
+		attr.BlkSize = 0
+	}
 }
