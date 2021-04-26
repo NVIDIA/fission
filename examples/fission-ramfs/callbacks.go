@@ -1152,8 +1152,12 @@ Restart:
 		fileInode.fileData = make([]byte, 0)
 	}
 
+	globals.lastFH++
+
+	globals.fhMap[globals.lastFH] = openIn.Flags
+
 	openOut = &fission.OpenOut{
-		FH:        0,
+		FH:        globals.lastFH,
 		OpenFlags: fission.FOpenResponseDirectIO,
 		Padding:   0,
 	}
@@ -1167,6 +1171,7 @@ Restart:
 func (dummy *globalsStruct) DoRead(inHeader *fission.InHeader, readIn *fission.ReadIn) (readOut *fission.ReadOut, errno syscall.Errno) {
 	var (
 		fileInode          *inodeStruct
+		fOpenRequestFlags  uint32
 		granted            bool
 		grantedLockSet     *grantedLockSetStruct = makeGrantedLockSet()
 		ok                 bool
@@ -1175,6 +1180,18 @@ func (dummy *globalsStruct) DoRead(inHeader *fission.InHeader, readIn *fission.R
 
 Restart:
 	grantedLockSet.get(globals.tryLock)
+
+	fOpenRequestFlags, ok = globals.fhMap[readIn.FH]
+	if !ok {
+		grantedLockSet.freeAll(false)
+		errno = syscall.ENOENT
+		return
+	}
+	if 0 != (fOpenRequestFlags & fission.FOpenRequestWRONLY) {
+		grantedLockSet.freeAll(false)
+		errno = syscall.EINVAL
+		return
+	}
 
 	fileInode, ok = globals.inodeMap[inHeader.NodeID]
 	if !ok {
@@ -1222,15 +1239,29 @@ Restart:
 func (dummy *globalsStruct) DoWrite(inHeader *fission.InHeader, writeIn *fission.WriteIn) (writeOut *fission.WriteOut, errno syscall.Errno) {
 	var (
 		fileInode           *inodeStruct
+		fOpenRequestFlags   uint32
 		granted             bool
 		grantedLockSet      *grantedLockSetStruct = makeGrantedLockSet()
 		ok                  bool
 		overwriteSize       uint64
+		writeOffsetActual   uint64
 		writeOffsetPlusSize uint64
 	)
 
 Restart:
 	grantedLockSet.get(globals.tryLock)
+
+	fOpenRequestFlags, ok = globals.fhMap[writeIn.FH]
+	if !ok {
+		grantedLockSet.freeAll(false)
+		errno = syscall.ENOENT
+		return
+	}
+	if 0 != (fOpenRequestFlags & fission.FOpenRequestRDONLY) {
+		grantedLockSet.freeAll(false)
+		errno = syscall.EINVAL
+		return
+	}
 
 	fileInode, ok = globals.inodeMap[inHeader.NodeID]
 	if !ok {
@@ -1251,22 +1282,28 @@ Restart:
 		return
 	}
 
+	if 0 == (fOpenRequestFlags & fission.FOpenRequestAPPEND) {
+		writeOffsetActual = writeIn.Offset
+	} else {
+		writeOffsetActual = fileInode.attr.Size
+	}
+
 	writeOffsetPlusSize = writeIn.Offset + uint64(writeIn.Size)
 
-	if writeIn.Offset < fileInode.attr.Size {
+	if writeOffsetActual < fileInode.attr.Size {
 		if writeOffsetPlusSize <= fileInode.attr.Size {
-			_ = copy(fileInode.fileData[writeIn.Offset:writeOffsetPlusSize], writeIn.Data)
+			_ = copy(fileInode.fileData[writeOffsetActual:writeOffsetPlusSize], writeIn.Data)
 		} else {
-			overwriteSize = fileInode.attr.Size - writeIn.Offset
+			overwriteSize = fileInode.attr.Size - writeOffsetActual
 
-			_ = copy(fileInode.fileData[writeIn.Offset:], writeIn.Data[:overwriteSize])
+			_ = copy(fileInode.fileData[writeOffsetActual:], writeIn.Data[:overwriteSize])
 			fileInode.fileData = append(fileInode.fileData, writeIn.Data[overwriteSize:]...)
 
 			fileInode.attr.Size = writeOffsetPlusSize
 		}
 	} else {
-		if writeIn.Offset > fileInode.attr.Size {
-			fileInode.fileData = append(fileInode.fileData, make([]byte, (writeIn.Offset-fileInode.attr.Size))...)
+		if writeOffsetActual > fileInode.attr.Size {
+			fileInode.fileData = append(fileInode.fileData, make([]byte, (writeOffsetActual-fileInode.attr.Size))...)
 		}
 
 		fileInode.fileData = append(fileInode.fileData, writeIn.Data...)
@@ -1321,6 +1358,13 @@ func (dummy *globalsStruct) DoRelease(inHeader *fission.InHeader, releaseIn *fis
 Restart:
 	grantedLockSet.get(globals.tryLock)
 
+	_, ok = globals.fhMap[releaseIn.FH]
+	if !ok {
+		grantedLockSet.freeAll(false)
+		errno = syscall.ENOENT
+		return
+	}
+
 	fileInode, ok = globals.inodeMap[inHeader.NodeID]
 	if !ok {
 		grantedLockSet.freeAll(false)
@@ -1339,6 +1383,8 @@ Restart:
 		errno = syscall.EINVAL
 		return
 	}
+
+	delete(globals.fhMap, releaseIn.FH)
 
 	if 0 == fileInode.attr.NLink {
 		delete(globals.inodeMap, inHeader.NodeID)
@@ -2173,6 +2219,10 @@ Restart:
 
 	globals.inodeMap[fileInode.attr.Ino] = fileInode
 
+	globals.lastFH++
+
+	globals.fhMap[globals.lastFH] = createIn.Flags
+
 	createOut = &fission.CreateOut{
 		EntryOut: fission.EntryOut{
 			NodeID:         fileInode.attr.Ino,
@@ -2198,7 +2248,7 @@ Restart:
 				Padding:   fileInode.attr.Padding,
 			},
 		},
-		FH:        0,
+		FH:        globals.lastFH,
 		OpenFlags: fission.FOpenResponseDirectIO,
 		Padding:   0,
 	}

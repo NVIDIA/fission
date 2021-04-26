@@ -96,6 +96,8 @@ type globalsStruct struct {
 	dirEntryMapDummy      *dirEntryMapDummyStruct
 	inodeMap              map[uint64]*inodeStruct // key is inodeStruct.attr.Ino
 	lastNodeID            uint64                  // valid NodeID's start at 1... but 1 is the RootDir NodeID
+	fhMap                 map[uint64]uint32       // key is FH; value is {create|open}In.Flags
+	lastFH                uint64
 	alreadyLoggedIgnoring alreadyLoggedIgnoringStruct
 	volume                fission.Volume
 }
@@ -183,6 +185,10 @@ func main() {
 	globals.inodeMap[1] = rootInode
 
 	globals.lastNodeID = uint64(1) // since we used NodeID 1 for the RootDir NodeID
+
+	globals.fhMap = make(map[uint64]uint32)
+
+	globals.lastFH = 0
 
 	globals.alreadyLoggedIgnoring.setAttrInValidFH = false
 
