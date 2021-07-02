@@ -17,6 +17,7 @@ type volumeStruct struct {
 	mountpointDirPath string
 	fuseSubtype       string
 	initOutMaxWrite   uint32
+	allowOther        bool
 	callbacks         Callbacks
 	logger            *log.Logger
 	errChan           chan error
@@ -28,12 +29,13 @@ type volumeStruct struct {
 	callbacksWG       sync.WaitGroup
 }
 
-func newVolume(volumeName string, mountpointDirPath string, fuseSubtype string, initOutMaxWrite uint32, callbacks Callbacks, logger *log.Logger, errChan chan error) (volume *volumeStruct) {
+func newVolume(volumeName string, mountpointDirPath string, fuseSubtype string, initOutMaxWrite uint32, allowOther bool, callbacks Callbacks, logger *log.Logger, errChan chan error) (volume *volumeStruct) {
 	volume = &volumeStruct{
 		volumeName:        volumeName,
 		mountpointDirPath: mountpointDirPath,
 		fuseSubtype:       fuseSubtype,
 		initOutMaxWrite:   initOutMaxWrite,
+		allowOther:        allowOther,
 		callbacks:         callbacks,
 		logger:            logger,
 		errChan:           errChan,
