@@ -1,6 +1,10 @@
 github.com/NVIDIA/cstruct v0.0.0-20210203201140-f4db46040b9a h1:kC/haCyNLEPaV++f9Ro7w5MyW5KclVUNrTG7JhmSp/M=
 github.com/NVIDIA/cstruct v0.0.0-20210203201140-f4db46040b9a/go.mod h1:Ffet7HOf/prPpmqMxpWFXEimd/5YHt9MKO/murMNKos=
+github.com/NVIDIA/cstruct v0.0.0-20210804235153-e02d4f5f012d h1:DSX7RxYXf0jevVSL+NbPdaMKNr8YADNcAFYvP1L10JE=
+github.com/NVIDIA/cstruct v0.0.0-20210804235153-e02d4f5f012d/go.mod h1:d68dR75IgEqHcodexLfWr6dEFVUs90ApRj5KSYkL59k=
 github.com/NVIDIA/sortedmap v0.0.0-20210206003014-af46f3efdbec h1:SO7/dGH1jwQTdsaXHQR87UsFGXMIeAPtuT1YlTsD+Iw=
 github.com/NVIDIA/sortedmap v0.0.0-20210206003014-af46f3efdbec/go.mod h1:UobtfEnrrugMbdhaJNcTXPmrHDNJlbyznqkDFDyOcpM=
+github.com/NVIDIA/sortedmap v0.0.0-20210804235713-3e115b37465d h1:x/cEPpdNatZGZlnQ0lalpfxy7bd7dy9zW/SZKMGn5Ys=
+github.com/NVIDIA/sortedmap v0.0.0-20210804235713-3e115b37465d/go.mod h1:94gmSfIoS2wX1UFVNLFTfLaueExrrVVpVVp8QP1iGmw=
 golang.org/x/sys v0.0.0-20210630005230-0f9fa26af87c h1:F1jZWGFhYfh0Ci55sIpILtKKK8p3i2/krTr0H1rg74I=
 golang.org/x/sys v0.0.0-20210630005230-0f9fa26af87c/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
