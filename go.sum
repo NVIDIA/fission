@@ -2,5 +2,7 @@ github.com/NVIDIA/cstruct v0.0.0-20210817223100-441a06a021c8 h1:hMAAyAeYB1T1Dnxq
 github.com/NVIDIA/cstruct v0.0.0-20210817223100-441a06a021c8/go.mod h1:GPbuJvLD4QWiHPS6vivLzh+XMAx6va0Aucm6ipa5S0I=
 github.com/NVIDIA/sortedmap v0.0.0-20210818004215-48fa0266cfdd h1:ny3/NI9XLbOegzBjq4xLGQ8FOCR168rjWpvs7KNxCww=
 github.com/NVIDIA/sortedmap v0.0.0-20210818004215-48fa0266cfdd/go.mod h1:YtiQTabdmrFxECTKRqpuY/sXCKXOvaEc8plI2zYFb+k=
+github.com/NVIDIA/sortedmap v0.0.0-20210818193114-64918d535a18 h1:yV4uip6oWf2Z9wkz7azNPeeVAVQDqR6a52HPotwjMtg=
+github.com/NVIDIA/sortedmap v0.0.0-20210818193114-64918d535a18/go.mod h1:YtiQTabdmrFxECTKRqpuY/sXCKXOvaEc8plI2zYFb+k=
 golang.org/x/sys v0.0.0-20210630005230-0f9fa26af87c h1:F1jZWGFhYfh0Ci55sIpILtKKK8p3i2/krTr0H1rg74I=
 golang.org/x/sys v0.0.0-20210630005230-0f9fa26af87c/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
