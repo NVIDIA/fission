@@ -1,9 +1,9 @@
 module github.com/NVIDIA/fission
 
-go 1.16
+go 1.17
 
 require (
-	github.com/NVIDIA/cstruct v0.0.0-20210804235153-e02d4f5f012d // indirect
-	github.com/NVIDIA/sortedmap v0.0.0-20210804235713-3e115b37465d
+	github.com/NVIDIA/cstruct v0.0.0-20210817223100-441a06a021c8 // indirect
+	github.com/NVIDIA/sortedmap v0.0.0-20210818004215-48fa0266cfdd
 	golang.org/x/sys v0.0.0-20210630005230-0f9fa26af87c
 )
