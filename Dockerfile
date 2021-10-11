@@ -45,7 +45,7 @@
 #     -it: tells Docker to run the command interactively
 
 FROM alpine:3.14.0
-ARG GolangVersion=1.17
+ARG GolangVersion=1.17.2
 RUN apk add --no-cache bind-tools   \
                        curl         \
                        fuse         \
