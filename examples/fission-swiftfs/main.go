@@ -412,7 +412,7 @@ RetryAfterReAuth:
 
 	globals.errChan = make(chan error, 1)
 
-	globals.volume = fission.NewVolume(globals.volumeName, globals.config.MountPoint, fuseSubtype, initOutMaxWrite, false, &globals, globals.logger, globals.errChan)
+	globals.volume = fission.NewVolume(globals.volumeName, globals.config.MountPoint, fuseSubtype, initOutMaxWrite, false, false, &globals, globals.logger, globals.errChan)
 
 	err = globals.volume.DoMount()
 	if nil != err {

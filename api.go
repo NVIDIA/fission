@@ -93,8 +93,8 @@ type Callbacks interface {
 // FUSE upcalls (e.g. as a result of an intentional DoUnmount() call or some unexpected error reading
 // from /dev/fuse).
 //
-func NewVolume(volumeName string, mountpointDirPath string, fuseSubtype string, initOutMaxWrite uint32, allowOther bool, callbacks Callbacks, logger *log.Logger, errChan chan error) (volume Volume) {
-	volume = newVolume(volumeName, mountpointDirPath, fuseSubtype, initOutMaxWrite, allowOther, callbacks, logger, errChan)
+func NewVolume(volumeName string, mountpointDirPath string, fuseSubtype string, initOutMaxWrite uint32, defaultPermissions bool, allowOther bool, callbacks Callbacks, logger *log.Logger, errChan chan error) (volume Volume) {
+	volume = newVolume(volumeName, mountpointDirPath, fuseSubtype, initOutMaxWrite, defaultPermissions, allowOther, callbacks, logger, errChan)
 	return
 }
 

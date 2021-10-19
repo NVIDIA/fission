@@ -104,6 +104,9 @@ func (volume *volumeStruct) DoMount() (err error) {
 		"," + gidOption +
 		"," + fsnameOption
 
+	if volume.defaultPermissions {
+		mountOptions += ",default_permissions"
+	}
 	if volume.allowOther {
 		mountOptions += ",allow_other"
 	}

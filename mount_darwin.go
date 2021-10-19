@@ -95,6 +95,9 @@ func (volume *volumeStruct) DoMount() (err error) {
 		"," + volnameOption +
 		"," + iosizeOption
 
+	if volume.defaultPermissions {
+		mountOptions += ",default_permissions"
+	}
 	if volume.allowOther {
 		mountOptions += ",allow_other"
 	}
