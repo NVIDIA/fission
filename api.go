@@ -145,6 +145,11 @@ const (
 )
 
 const (
+	SetXAttrInCreate  = uint32(1)
+	SetXAttrInReplace = uint32(2)
+)
+
+const (
 	FOpenRequestRDONLY = uint32(syscall.O_RDONLY)
 	FOpenRequestWRONLY = uint32(syscall.O_WRONLY)
 	FOpenRequestRDWR   = uint32(syscall.O_RDWR)
@@ -566,7 +571,7 @@ type FSyncIn struct {
 
 type SetXAttrIn struct {
 	Size     uint32 // == len(Name) + 1 + len(Data)
-	Flags    uint32
+	Flags    uint32 // if not 0, either of SetXAttrIn*
 	Position uint32 // darwin only - set to zero otherwise
 	Padding  uint32 // darwin only
 	Name     []byte
