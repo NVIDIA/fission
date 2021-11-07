@@ -16,7 +16,8 @@ type volumeStruct struct {
 	volumeName         string
 	mountpointDirPath  string
 	fuseSubtype        string
-	initOutMaxWrite    uint32
+	maxRead            uint32
+	maxWrite           uint32
 	defaultPermissions bool
 	allowOther         bool
 	callbacks          Callbacks
@@ -30,18 +31,19 @@ type volumeStruct struct {
 	callbacksWG        sync.WaitGroup
 }
 
-func newVolume(volumeName string, mountpointDirPath string, fuseSubtype string, initOutMaxWrite uint32, defaultPermissions bool, allowOther bool, callbacks Callbacks, logger *log.Logger, errChan chan error) (volume *volumeStruct) {
+func newVolume(volumeName string, mountpointDirPath string, fuseSubtype string, maxRead uint32, maxWrite uint32, defaultPermissions bool, allowOther bool, callbacks Callbacks, logger *log.Logger, errChan chan error) (volume *volumeStruct) {
 	volume = &volumeStruct{
 		volumeName:         volumeName,
 		mountpointDirPath:  mountpointDirPath,
 		fuseSubtype:        fuseSubtype,
-		initOutMaxWrite:    initOutMaxWrite,
+		maxRead:            maxRead,
+		maxWrite:           maxWrite,
 		defaultPermissions: defaultPermissions,
 		allowOther:         allowOther,
 		callbacks:          callbacks,
 		logger:             logger,
 		errChan:            errChan,
-		devFuseFDReadSize:  InHeaderSize + WriteInFixedPortionSize + initOutMaxWrite,
+		devFuseFDReadSize:  InHeaderSize + WriteInFixedPortionSize + maxWrite,
 	}
 
 	volume.devFuseFDReadPool = sync.Pool{

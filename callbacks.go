@@ -22,7 +22,7 @@ func (volume *volumeStruct) doLookup(inHeader *InHeader, devFuseFDReadBufPayload
 	}
 
 	lookupOut, errno = volume.callbacks.DoLookup(inHeader, lookupIn)
-	if 0 != errno {
+	if errno != 0 {
 		volume.devFuseFDWriter(inHeader, errno)
 		return
 	}
@@ -79,7 +79,7 @@ func (volume *volumeStruct) doGetAttr(inHeader *InHeader, devFuseFDReadBufPayloa
 	}
 
 	getAttrOut, errno = volume.callbacks.DoGetAttr(inHeader, getAttrIn)
-	if 0 != errno {
+	if errno != 0 {
 		volume.devFuseFDWriter(inHeader, errno)
 		return
 	}
@@ -112,7 +112,7 @@ func (volume *volumeStruct) doSetAttr(inHeader *InHeader, devFuseFDReadBufPayloa
 	}
 
 	setAttrOut, errno = volume.callbacks.DoSetAttr(inHeader, setAttrIn)
-	if 0 != errno {
+	if errno != 0 {
 		volume.devFuseFDWriter(inHeader, errno)
 		return
 	}
@@ -142,7 +142,7 @@ func (volume *volumeStruct) doReadLink(inHeader *InHeader, devFuseFDReadBufPaylo
 	}
 
 	readLinkOut, errno = volume.callbacks.DoReadLink(inHeader)
-	if 0 != errno {
+	if errno != 0 {
 		volume.devFuseFDWriter(inHeader, errno)
 		return
 	}
@@ -174,7 +174,7 @@ func (volume *volumeStruct) doSymLink(inHeader *InHeader, devFuseFDReadBufPayloa
 	}
 
 	symLinkOut, errno = volume.callbacks.DoSymLink(inHeader, symLinkIn)
-	if 0 != errno {
+	if errno != 0 {
 		volume.devFuseFDWriter(inHeader, errno)
 		return
 	}
@@ -216,7 +216,7 @@ func (volume *volumeStruct) doMkNod(inHeader *InHeader, devFuseFDReadBufPayload 
 	}
 
 	mkNodOut, errno = volume.callbacks.DoMkNod(inHeader, mkNodIn)
-	if 0 != errno {
+	if errno != 0 {
 		volume.devFuseFDWriter(inHeader, errno)
 		return
 	}
@@ -256,7 +256,7 @@ func (volume *volumeStruct) doMkDir(inHeader *InHeader, devFuseFDReadBufPayload 
 	}
 
 	mkDirOut, errno = volume.callbacks.DoMkDir(inHeader, mkDirIn)
-	if 0 != errno {
+	if errno != 0 {
 		volume.devFuseFDWriter(inHeader, errno)
 		return
 	}
@@ -356,7 +356,7 @@ func (volume *volumeStruct) doLink(inHeader *InHeader, devFuseFDReadBufPayload [
 	}
 
 	linkOut, errno = volume.callbacks.DoLink(inHeader, linkIn)
-	if 0 != errno {
+	if errno != 0 {
 		volume.devFuseFDWriter(inHeader, errno)
 		return
 	}
@@ -395,7 +395,7 @@ func (volume *volumeStruct) doOpen(inHeader *InHeader, devFuseFDReadBufPayload [
 	}
 
 	openOut, errno = volume.callbacks.DoOpen(inHeader, openIn)
-	if 0 != errno {
+	if errno != 0 {
 		volume.devFuseFDWriter(inHeader, errno)
 		return
 	}
@@ -434,7 +434,7 @@ func (volume *volumeStruct) doRead(inHeader *InHeader, devFuseFDReadBufPayload [
 	}
 
 	readOut, errno = volume.callbacks.DoRead(inHeader, readIn)
-	if 0 != errno {
+	if errno != 0 {
 		volume.devFuseFDWriter(inHeader, errno)
 		return
 	}
@@ -476,7 +476,7 @@ func (volume *volumeStruct) doWrite(inHeader *InHeader, devFuseFDReadBufPayload 
 	}
 
 	writeOut, errno = volume.callbacks.DoWrite(inHeader, writeIn)
-	if 0 != errno {
+	if errno != 0 {
 		volume.devFuseFDWriter(inHeader, errno)
 		return
 	}
@@ -503,7 +503,7 @@ func (volume *volumeStruct) doStatFS(inHeader *InHeader, devFuseFDReadBufPayload
 	}
 
 	statFSOut, errno = volume.callbacks.DoStatFS(inHeader)
-	if 0 != errno {
+	if errno != 0 {
 		volume.devFuseFDWriter(inHeader, errno)
 		return
 	}
@@ -612,12 +612,12 @@ func (volume *volumeStruct) doGetXAttr(inHeader *InHeader, devFuseFDReadBufPaylo
 	}
 
 	getXAttrOut, errno = volume.callbacks.DoGetXAttr(inHeader, getXAttrIn)
-	if 0 != errno {
+	if errno != 0 {
 		volume.devFuseFDWriter(inHeader, errno)
 		return
 	}
 
-	if 0 == getXAttrIn.Size {
+	if getXAttrIn.Size == 0 {
 		outPayload = make([]byte, GetXAttrOutSizeOnlySize)
 
 		*(*uint32)(unsafe.Pointer(&outPayload[0])) = getXAttrOut.Size
@@ -652,12 +652,12 @@ func (volume *volumeStruct) doListXAttr(inHeader *InHeader, devFuseFDReadBufPayl
 	}
 
 	listXAttrOut, errno = volume.callbacks.DoListXAttr(inHeader, listXAttrIn)
-	if 0 != errno {
+	if errno != 0 {
 		volume.devFuseFDWriter(inHeader, errno)
 		return
 	}
 
-	if 0 == listXAttrIn.Size {
+	if listXAttrIn.Size == 0 {
 		outPayload = make([]byte, ListXAttrOutSizeOnlySize)
 
 		*(*uint32)(unsafe.Pointer(&outPayload[0])) = listXAttrOut.Size
@@ -665,7 +665,7 @@ func (volume *volumeStruct) doListXAttr(inHeader *InHeader, devFuseFDReadBufPayl
 	} else {
 		nameTotalLen = 0
 
-		if 0 != len(listXAttrOut.Name) {
+		if len(listXAttrOut.Name) != 0 {
 			for _, nameElement = range listXAttrOut.Name {
 				nameTotalLen += uint32(len(nameElement) + 1)
 			}
@@ -746,12 +746,12 @@ func (volume *volumeStruct) doInit(inHeader *InHeader, devFuseFDReadBufPayload [
 	}
 
 	initOut, errno = volume.callbacks.DoInit(inHeader, initIn)
-	if 0 != errno {
+	if errno != 0 {
 		volume.logger.Printf("Call to doInit() returning bad errno == %v", errno)
 		volume.devFuseFDWriter(inHeader, errno)
 		return
 	}
-	if initOut.MaxWrite != volume.initOutMaxWrite {
+	if initOut.MaxWrite != volume.maxWrite {
 		volume.logger.Printf("Call to doInit() attempted to modify MaxWrite... ignoring it")
 	}
 
@@ -763,7 +763,7 @@ func (volume *volumeStruct) doInit(inHeader *InHeader, devFuseFDReadBufPayload [
 	*(*uint32)(unsafe.Pointer(&outPayload[12])) = initOut.Flags
 	*(*uint16)(unsafe.Pointer(&outPayload[16])) = initOut.MaxBackground
 	*(*uint16)(unsafe.Pointer(&outPayload[18])) = initOut.CongestionThreshhold
-	*(*uint32)(unsafe.Pointer(&outPayload[20])) = volume.initOutMaxWrite
+	*(*uint32)(unsafe.Pointer(&outPayload[20])) = volume.maxWrite
 
 	volume.devFuseFDWriter(inHeader, 0, outPayload)
 }
@@ -788,7 +788,7 @@ func (volume *volumeStruct) doOpenDir(inHeader *InHeader, devFuseFDReadBufPayloa
 	}
 
 	openDirOut, errno = volume.callbacks.DoOpenDir(inHeader, openDirIn)
-	if 0 != errno {
+	if errno != 0 {
 		volume.devFuseFDWriter(inHeader, errno)
 		return
 	}
@@ -833,7 +833,7 @@ func (volume *volumeStruct) doReadDir(inHeader *InHeader, devFuseFDReadBufPayloa
 	}
 
 	readDirOut, errno = volume.callbacks.DoReadDir(inHeader, readDirIn)
-	if 0 != errno {
+	if errno != 0 {
 		volume.devFuseFDWriter(inHeader, errno)
 		return
 	}
@@ -955,7 +955,7 @@ func (volume *volumeStruct) doGetLK(inHeader *InHeader, devFuseFDReadBufPayload 
 	}
 
 	getLKOut, errno = volume.callbacks.DoGetLK(inHeader, getLKIn)
-	if 0 != errno {
+	if errno != 0 {
 		volume.devFuseFDWriter(inHeader, errno)
 		return
 	}
@@ -1075,7 +1075,7 @@ func (volume *volumeStruct) doCreate(inHeader *InHeader, devFuseFDReadBufPayload
 	}
 
 	createOut, errno = volume.callbacks.DoCreate(inHeader, createIn)
-	if 0 != errno {
+	if errno != 0 {
 		volume.devFuseFDWriter(inHeader, errno)
 		return
 	}
@@ -1137,7 +1137,7 @@ func (volume *volumeStruct) doBMap(inHeader *InHeader, devFuseFDReadBufPayload [
 	}
 
 	bMapOut, errno = volume.callbacks.DoBMap(inHeader, bMapIn)
-	if 0 != errno {
+	if errno != 0 {
 		volume.devFuseFDWriter(inHeader, errno)
 		return
 	}
@@ -1187,7 +1187,7 @@ func (volume *volumeStruct) doPoll(inHeader *InHeader, devFuseFDReadBufPayload [
 	}
 
 	pollOut, errno = volume.callbacks.DoPoll(inHeader, pollIn)
-	if 0 != errno {
+	if errno != 0 {
 		volume.devFuseFDWriter(inHeader, errno)
 		return
 	}
@@ -1297,7 +1297,7 @@ func (volume *volumeStruct) doReadDirPlus(inHeader *InHeader, devFuseFDReadBufPa
 	}
 
 	readDirPlusOut, errno = volume.callbacks.DoReadDirPlus(inHeader, readDirPlusIn)
-	if 0 != errno {
+	if errno != 0 {
 		volume.devFuseFDWriter(inHeader, errno)
 		return
 	}
@@ -1410,7 +1410,7 @@ func (volume *volumeStruct) doLSeek(inHeader *InHeader, devFuseFDReadBufPayload 
 	}
 
 	lSeekOut, errno = volume.callbacks.DoLSeek(inHeader, lSeekIn)
-	if 0 != errno {
+	if errno != 0 {
 		volume.devFuseFDWriter(inHeader, errno)
 		return
 	}

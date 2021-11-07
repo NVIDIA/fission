@@ -83,18 +83,16 @@ type Callbacks interface {
 	DoLSeek(inHeader *InHeader, lSeekIn *LSeekIn) (lSeekOut *LSeekOut, errno syscall.Errno)
 }
 
-// NewVolume is called to create a Volume instance. Various callbacks listed in the Callbacks interface
-// will be made while the Volume is mounted. The type of the file system, once mounted, will be "fuse"
-// and, if non-empty, followed by a "." and the fuseSubtype (if supported... as it is on Linux). Non-root
-// users may want to specify allowOther as TRUE to enable other non-root users access to the mount point.
-// Note that the caller provides a value for InitOut.MaxWrite at the time the Volume instance is provisioned
-// so that the package may properly setup the read loop against /dev/fuse prior to reception of an InitIn
-// request. A chan error is also supplied to enable the Volume to indicate that it is no longer servicing
-// FUSE upcalls (e.g. as a result of an intentional DoUnmount() call or some unexpected error reading
-// from /dev/fuse).
+// NewVolume is called to create a Volume instance. Various callbacks listed in the Callbacks
+// interface will be made while the Volume is mounted. The type of the file system, once mounted,
+// will be "fuse" and, if non-empty, followed by a "." and the fuseSubtype (if supported... as it
+// is on Linux). Non-root users may want to specify allowOther as TRUE to enable other non-root
+// users access to the mount point. A chan error is also supplied to enable the Volume to indicate
+// that it is no longer servicing FUSE upcalls (e.g. as a result of an intentional DoUnmount() call
+// or some unexpected error reading from /dev/fuse).
 //
-func NewVolume(volumeName string, mountpointDirPath string, fuseSubtype string, initOutMaxWrite uint32, defaultPermissions bool, allowOther bool, callbacks Callbacks, logger *log.Logger, errChan chan error) (volume Volume) {
-	volume = newVolume(volumeName, mountpointDirPath, fuseSubtype, initOutMaxWrite, defaultPermissions, allowOther, callbacks, logger, errChan)
+func NewVolume(volumeName string, mountpointDirPath string, fuseSubtype string, maxRead uint32, maxWrite uint32, defaultPermissions bool, allowOther bool, callbacks Callbacks, logger *log.Logger, errChan chan error) (volume Volume) {
+	volume = newVolume(volumeName, mountpointDirPath, fuseSubtype, maxRead, maxWrite, defaultPermissions, allowOther, callbacks, logger, errChan)
 	return
 }
 

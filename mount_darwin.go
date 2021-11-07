@@ -86,7 +86,7 @@ func (volume *volumeStruct) DoMount() (err error) {
 	fsnameOption = "fsname=" + volume.volumeName
 	volnameOption = "volname=" + volume.volumeName
 
-	iosizeOption = fmt.Sprintf("iosize=%d", volume.initOutMaxWrite)
+	iosizeOption = fmt.Sprintf("iosize=%d", volume.maxWrite)
 
 	mountOptions = localOption +
 		"," + noAppleDoubleOption +

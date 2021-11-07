@@ -37,7 +37,9 @@ const (
 
 	initOutMaxBackgound         = uint16(100)
 	initOutCongestionThreshhold = uint16(0)
-	initOutMaxWrite             = uint32(128 * 1024) // 128KiB... the max write size in Linux FUSE at this time
+
+	maxRead  = uint32(128 * 1024) // 128KiB... the max read  size in Linux FUSE at this time
+	maxWrite = uint32(128 * 1024) // 128KiB... the max write size in Linux FUSE at this time
 
 	attrBlkSize = uint32(512)
 
@@ -192,7 +194,7 @@ func main() {
 
 	globals.alreadyLoggedIgnoring.setAttrInValidFH = false
 
-	globals.volume = fission.NewVolume(globals.volumeName, globals.mountPoint, fuseSubtype, initOutMaxWrite, false, false, &globals, globals.logger, globals.errChan)
+	globals.volume = fission.NewVolume(globals.volumeName, globals.mountPoint, fuseSubtype, maxRead, maxWrite, false, false, &globals, globals.logger, globals.errChan)
 
 	err = globals.volume.DoMount()
 	if nil != err {

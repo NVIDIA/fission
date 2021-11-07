@@ -1722,7 +1722,7 @@ func (dummy *globalsStruct) DoInit(inHeader *fission.InHeader, initIn *fission.I
 		Flags:                initOutFlagsNearlyAll,
 		MaxBackground:        initOutMaxBackgound,
 		CongestionThreshhold: initOutCongestionThreshhold,
-		MaxWrite:             initOutMaxWrite,
+		MaxWrite:             maxWrite,
 	}
 
 	errno = 0
