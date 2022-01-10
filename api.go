@@ -632,7 +632,8 @@ type InitIn struct {
 	Flags        uint32 // mask of const InitFlags* bits
 }
 
-const InitOutSize = 24
+const InitOutSizePre_7_28 = 24
+const InitOutSize = 64
 
 type InitOut struct {
 	Major                uint32
@@ -642,6 +643,10 @@ type InitOut struct {
 	MaxBackground        uint16
 	CongestionThreshhold uint16
 	MaxWrite             uint32
+	TimeGran             uint32    // starting at 7.28
+	MaxPages             uint16    // starting at 7.28
+	Padding              uint16    // starting at 7.28
+	Unused               [8]uint32 // starting at 7.28
 }
 
 const OpenDirInSize = 8
