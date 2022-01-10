@@ -578,6 +578,10 @@ func (dummy *globalsStruct) DoInit(inHeader *fission.InHeader, initIn *fission.I
 		MaxBackground:        initOutMaxBackgound,
 		CongestionThreshhold: initOutCongestionThreshhold,
 		MaxWrite:             maxWrite,
+		TimeGran:             0, // accept default
+		MaxPages:             maxPages,
+		Padding:              0,
+		Unused:               [8]uint32{0, 0, 0, 0, 0, 0, 0, 0},
 	}
 
 	errno = 0

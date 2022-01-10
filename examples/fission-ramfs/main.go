@@ -38,8 +38,9 @@ const (
 	initOutMaxBackgound         = uint16(100)
 	initOutCongestionThreshhold = uint16(0)
 
-	maxRead  = uint32(128 * 1024) // 128KiB... the max read  size in Linux FUSE at this time
-	maxWrite = uint32(128 * 1024) // 128KiB... the max write size in Linux FUSE at this time
+	maxPages = 256                     // * 4KiB page size == 1MiB... the max read or write size in Linux FUSE at this time
+	maxRead  = uint32(maxPages * 4096) //                     1MiB... the max read          size in Linux FUSE at this time
+	maxWrite = uint32(maxPages * 4096) //                     1MiB... the max         write size in Linux FUSE at this time
 
 	attrBlkSize = uint32(512)
 

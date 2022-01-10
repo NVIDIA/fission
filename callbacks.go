@@ -751,9 +751,6 @@ func (volume *volumeStruct) doInit(inHeader *InHeader, devFuseFDReadBufPayload [
 		volume.devFuseFDWriter(inHeader, errno)
 		return
 	}
-	if initOut.MaxWrite != volume.maxWrite {
-		volume.logger.Printf("Call to doInit() attempted to modify MaxWrite... ignoring it")
-	}
 
 	outPayload = make([]byte, InitOutSize)
 
@@ -763,7 +760,22 @@ func (volume *volumeStruct) doInit(inHeader *InHeader, devFuseFDReadBufPayload [
 	*(*uint32)(unsafe.Pointer(&outPayload[12])) = initOut.Flags
 	*(*uint16)(unsafe.Pointer(&outPayload[16])) = initOut.MaxBackground
 	*(*uint16)(unsafe.Pointer(&outPayload[18])) = initOut.CongestionThreshhold
-	*(*uint32)(unsafe.Pointer(&outPayload[20])) = volume.maxWrite
+	*(*uint32)(unsafe.Pointer(&outPayload[20])) = initOut.MaxWrite
+	*(*uint32)(unsafe.Pointer(&outPayload[24])) = initOut.TimeGran
+	*(*uint16)(unsafe.Pointer(&outPayload[28])) = initOut.MaxPages
+	*(*uint16)(unsafe.Pointer(&outPayload[30])) = initOut.Padding
+	*(*uint32)(unsafe.Pointer(&outPayload[32])) = initOut.Unused[0]
+	*(*uint32)(unsafe.Pointer(&outPayload[36])) = initOut.Unused[1]
+	*(*uint32)(unsafe.Pointer(&outPayload[40])) = initOut.Unused[2]
+	*(*uint32)(unsafe.Pointer(&outPayload[44])) = initOut.Unused[3]
+	*(*uint32)(unsafe.Pointer(&outPayload[48])) = initOut.Unused[4]
+	*(*uint32)(unsafe.Pointer(&outPayload[52])) = initOut.Unused[5]
+	*(*uint32)(unsafe.Pointer(&outPayload[56])) = initOut.Unused[6]
+	*(*uint32)(unsafe.Pointer(&outPayload[60])) = initOut.Unused[7]
+
+	if (initOut.Major < 7) || ((initOut.Major == 7) && (initOut.Minor < 28)) {
+		outPayload = outPayload[:InitOutSizePre_7_28]
+	}
 
 	volume.devFuseFDWriter(inHeader, 0, outPayload)
 }
