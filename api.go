@@ -14,7 +14,6 @@ import (
 // to see the various callbacks listed in the Callbacks interface. This will
 // continue a single call to DoUnmount() is made after which the Volume instance
 // may be safely discarded.
-//
 type Volume interface {
 	// DoMount is invoked on a Volume interface to perform the FUSE mount and
 	// begin receiving the various callbacks listed in the Callbacks interface.
@@ -37,7 +36,6 @@ type Volume interface {
 // /dev/fuse read loop (including, of course, the reception of the InitIn up-call).
 // The implementation of DoInit, therefore, should not expect returning an InitOut
 // with a different MaxWrite to be honored.
-//
 type Callbacks interface {
 	DoLookup(inHeader *InHeader, lookupIn *LookupIn) (lookupOut *LookupOut, errno syscall.Errno)
 	DoForget(inHeader *InHeader, forgetIn *ForgetIn)
@@ -90,7 +88,6 @@ type Callbacks interface {
 // users access to the mount point. A chan error is also supplied to enable the Volume to indicate
 // that it is no longer servicing FUSE upcalls (e.g. as a result of an intentional DoUnmount() call
 // or some unexpected error reading from /dev/fuse).
-//
 func NewVolume(volumeName string, mountpointDirPath string, fuseSubtype string, maxRead uint32, maxWrite uint32, defaultPermissions bool, allowOther bool, callbacks Callbacks, logger *log.Logger, errChan chan error) (volume Volume) {
 	volume = newVolume(volumeName, mountpointDirPath, fuseSubtype, maxRead, maxWrite, defaultPermissions, allowOther, callbacks, logger, errChan)
 	return
