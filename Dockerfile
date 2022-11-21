@@ -24,7 +24,8 @@
 #          [-d|--detach]                                \
 #          [-it]                                        \
 #          [--rm]                                       \
-#          --privileged                                 \
+#          --cap-add SYS_ADMIN                          \
+#          --device /dev/fuse                           \
 #          --mount src="$(pwd)",target="/src",type=bind \
 #          <image id>|<repository>[:<tag>]
 #
@@ -32,6 +33,8 @@
 #     -d|--detach:  tells Docker to detach from running container 
 #     -it:          tells Docker to run container interactively
 #     --rm:         tells Docker to destroy container upon exit
+#     --cap-add:    tells Docker to grant the SYS_ADMIN capability to the container (needed for FUSE)
+#     --device:     tells Docker to expose the /dev/fuse device file to the container (needed for FUSE)
 #     --privileged: tells Docker to, among other things, grant access to /dev/fuse
 #     --mount:
 #       1) bind mounts the context into /src in the container
@@ -44,7 +47,7 @@
 #   Notes:
 #     -it: tells Docker to run the command interactively
 
-FROM alpine:3.16.2
+FROM alpine:3.17
 ARG GolangVersion=1.19.3
 RUN apk add --no-cache bind-tools   \
                        curl         \
@@ -64,3 +67,4 @@ RUN tar -C /usr/local -xzf $GolangBasename
 ENV PATH $PATH:/usr/local/go/bin
 VOLUME /src
 WORKDIR /src
+RUN git config --global --add safe.directory /src
