@@ -13,31 +13,37 @@ import (
 )
 
 type volumeStruct struct {
-	volumeName        string
-	mountpointDirPath string
-	fuseSubtype       string
-	initOutMaxWrite   uint32
-	callbacks         Callbacks
-	logger            *log.Logger
-	errChan           chan error
-	devFuseFDReadSize uint32 // InHeaderSize + WriteInSize + InitOut.MaxWrite
-	devFuseFDReadPool sync.Pool
-	devFuseFD         int
-	devFuseFile       *os.File
-	devFuseFDReaderWG sync.WaitGroup
-	callbacksWG       sync.WaitGroup
+	volumeName         string
+	mountpointDirPath  string
+	fuseSubtype        string
+	maxRead            uint32
+	maxWrite           uint32
+	defaultPermissions bool
+	allowOther         bool
+	callbacks          Callbacks
+	logger             *log.Logger
+	errChan            chan error
+	devFuseFDReadSize  uint32 // InHeaderSize + WriteInSize + InitOut.MaxWrite
+	devFuseFDReadPool  sync.Pool
+	devFuseFD          int
+	devFuseFile        *os.File
+	devFuseFDReaderWG  sync.WaitGroup
+	callbacksWG        sync.WaitGroup
 }
 
-func newVolume(volumeName string, mountpointDirPath string, fuseSubtype string, initOutMaxWrite uint32, callbacks Callbacks, logger *log.Logger, errChan chan error) (volume *volumeStruct) {
+func newVolume(volumeName string, mountpointDirPath string, fuseSubtype string, maxRead uint32, maxWrite uint32, defaultPermissions bool, allowOther bool, callbacks Callbacks, logger *log.Logger, errChan chan error) (volume *volumeStruct) {
 	volume = &volumeStruct{
-		volumeName:        volumeName,
-		mountpointDirPath: mountpointDirPath,
-		fuseSubtype:       fuseSubtype,
-		initOutMaxWrite:   initOutMaxWrite,
-		callbacks:         callbacks,
-		logger:            logger,
-		errChan:           errChan,
-		devFuseFDReadSize: InHeaderSize + WriteInFixedPortionSize + initOutMaxWrite,
+		volumeName:         volumeName,
+		mountpointDirPath:  mountpointDirPath,
+		fuseSubtype:        fuseSubtype,
+		maxRead:            maxRead,
+		maxWrite:           maxWrite,
+		defaultPermissions: defaultPermissions,
+		allowOther:         allowOther,
+		callbacks:          callbacks,
+		logger:             logger,
+		errChan:            errChan,
+		devFuseFDReadSize:  InHeaderSize + WriteInFixedPortionSize + maxWrite,
 	}
 
 	volume.devFuseFDReadPool = sync.Pool{

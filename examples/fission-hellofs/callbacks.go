@@ -7,7 +7,7 @@ import (
 	"bytes"
 	"syscall"
 
-	"github.com/swiftstack/fission"
+	"github.com/NVIDIA/fission"
 )
 
 func (dummy *globalsStruct) DoLookup(inHeader *fission.InHeader, lookupIn *fission.LookupIn) (lookupOut *fission.LookupOut, errno syscall.Errno) {
@@ -264,7 +264,11 @@ func (dummy *globalsStruct) DoInit(inHeader *fission.InHeader, initIn *fission.I
 		Flags:                initOutFlagsNearlyAll,
 		MaxBackground:        initOutMaxBackgound,
 		CongestionThreshhold: initOutCongestionThreshhold,
-		MaxWrite:             initOutMaxWrite,
+		MaxWrite:             maxWrite,
+		TimeGran:             0, // accept default
+		MaxPages:             maxPages,
+		Padding:              0,
+		Unused:               [8]uint32{0, 0, 0, 0, 0, 0, 0, 0},
 	}
 
 	errno = 0
@@ -326,6 +330,8 @@ func (dummy *globalsStruct) DoReadDir(inHeader *fission.InHeader, readDirIn *fis
 			errno = 0
 			return
 		}
+
+		totalSize += dirEntSize
 	}
 
 	errno = 0
@@ -450,6 +456,8 @@ func (dummy *globalsStruct) DoReadDirPlus(inHeader *fission.InHeader, readDirPlu
 			errno = 0
 			return
 		}
+
+		totalSize += dirEntSize
 	}
 
 	errno = 0
@@ -464,4 +472,16 @@ func (dummy *globalsStruct) DoRename2(inHeader *fission.InHeader, rename2In *fis
 func (dummy *globalsStruct) DoLSeek(inHeader *fission.InHeader, lSeekIn *fission.LSeekIn) (lSeekOut *fission.LSeekOut, errno syscall.Errno) {
 	errno = syscall.ENOSYS
 	return
+}
+
+func fixAttrSizes(attr *fission.Attr) {
+	if syscall.S_IFREG == (attr.Mode & syscall.S_IFMT) {
+		attr.Blocks = attr.Size + (uint64(attrBlkSize) - 1)
+		attr.Blocks /= uint64(attrBlkSize)
+		attr.BlkSize = attrBlkSize
+	} else {
+		attr.Size = 0
+		attr.Blocks = 0
+		attr.BlkSize = 0
+	}
 }

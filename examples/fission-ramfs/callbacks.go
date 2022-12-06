@@ -7,9 +7,9 @@ import (
 	"os"
 	"syscall"
 
-	"github.com/swiftstack/sortedmap"
+	"github.com/NVIDIA/sortedmap"
 
-	"github.com/swiftstack/fission"
+	"github.com/NVIDIA/fission"
 )
 
 func (dummy *globalsStruct) DoLookup(inHeader *fission.InHeader, lookupIn *fission.LookupIn) (lookupOut *fission.LookupOut, errno syscall.Errno) {
@@ -84,7 +84,6 @@ Restart:
 			Attr: fission.Attr{
 				Ino:       dirEntInode.attr.Ino,
 				Size:      dirEntInode.attr.Size,
-				Blocks:    dirEntInode.attr.Blocks,
 				ATimeSec:  dirEntInode.attr.ATimeSec,
 				MTimeSec:  dirEntInode.attr.MTimeSec,
 				CTimeSec:  dirEntInode.attr.CTimeSec,
@@ -96,11 +95,12 @@ Restart:
 				UID:       dirEntInode.attr.UID,
 				GID:       dirEntInode.attr.GID,
 				RDev:      dirEntInode.attr.RDev,
-				BlkSize:   attrBlkSize,
 				Padding:   dirEntInode.attr.Padding,
 			},
 		},
 	}
+
+	fixAttrSizes(&lookupOut.EntryOut.Attr)
 
 	grantedLockSet.freeAll(false)
 
@@ -145,7 +145,6 @@ Restart:
 		Attr: fission.Attr{
 			Ino:       inode.attr.Ino,
 			Size:      inode.attr.Size,
-			Blocks:    inode.attr.Blocks,
 			ATimeSec:  inode.attr.ATimeSec,
 			MTimeSec:  inode.attr.MTimeSec,
 			CTimeSec:  inode.attr.CTimeSec,
@@ -157,10 +156,11 @@ Restart:
 			UID:       inode.attr.UID,
 			GID:       inode.attr.GID,
 			RDev:      inode.attr.RDev,
-			BlkSize:   attrBlkSize,
 			Padding:   inode.attr.Padding,
 		},
 	}
+
+	fixAttrSizes(&getAttrOut.Attr)
 
 	grantedLockSet.freeAll(false)
 
@@ -272,7 +272,6 @@ Restart:
 		Attr: fission.Attr{
 			Ino:       inode.attr.Ino,
 			Size:      inode.attr.Size,
-			Blocks:    inode.attr.Blocks,
 			ATimeSec:  inode.attr.ATimeSec,
 			MTimeSec:  inode.attr.MTimeSec,
 			CTimeSec:  inode.attr.CTimeSec,
@@ -284,10 +283,11 @@ Restart:
 			UID:       inode.attr.UID,
 			GID:       inode.attr.GID,
 			RDev:      inode.attr.RDev,
-			BlkSize:   attrBlkSize,
 			Padding:   inode.attr.Padding,
 		},
 	}
+
+	fixAttrSizes(&setAttrOut.Attr)
 
 	grantedLockSet.freeAll(false)
 
@@ -393,8 +393,6 @@ Restart:
 		tryLock: makeTryLock(),
 		attr: fission.Attr{
 			Ino:       globals.lastNodeID,
-			Size:      0,
-			Blocks:    0,
 			ATimeSec:  unixTimeNowSec,
 			MTimeSec:  unixTimeNowSec,
 			CTimeSec:  unixTimeNowSec,
@@ -406,7 +404,6 @@ Restart:
 			UID:       inHeader.UID,
 			GID:       inHeader.GID,
 			RDev:      0,
-			BlkSize:   attrBlkSize,
 			Padding:   0,
 		},
 		xattrMap:    sortedmap.NewLLRBTree(sortedmap.CompareByteSlice, globals.xattrMapDummy),
@@ -414,6 +411,8 @@ Restart:
 		fileData:    nil,
 		symlinkData: symLinkIn.Data,
 	}
+
+	fixAttrSizes(&dirEntInode.attr)
 
 	ok, err = dirInode.dirEntryMap.Put(symLinkIn.Name, dirEntInode.attr.Ino)
 	if nil != err {
@@ -437,8 +436,6 @@ Restart:
 			AttrValidNSec:  attrValidNSec,
 			Attr: fission.Attr{
 				Ino:       dirEntInode.attr.Ino,
-				Size:      dirEntInode.attr.Size,
-				Blocks:    dirEntInode.attr.Blocks,
 				ATimeSec:  dirEntInode.attr.ATimeSec,
 				MTimeSec:  dirEntInode.attr.MTimeSec,
 				CTimeSec:  dirEntInode.attr.CTimeSec,
@@ -450,11 +447,12 @@ Restart:
 				UID:       dirEntInode.attr.UID,
 				GID:       dirEntInode.attr.GID,
 				RDev:      dirEntInode.attr.RDev,
-				BlkSize:   attrBlkSize,
 				Padding:   dirEntInode.attr.Padding,
 			},
 		},
 	}
+
+	fixAttrSizes(&symLinkOut.EntryOut.Attr)
 
 	grantedLockSet.freeAll(false)
 
@@ -527,8 +525,6 @@ Restart:
 		tryLock: makeTryLock(),
 		attr: fission.Attr{
 			Ino:       globals.lastNodeID,
-			Size:      0,
-			Blocks:    0,
 			ATimeSec:  unixTimeNowSec,
 			MTimeSec:  unixTimeNowSec,
 			CTimeSec:  unixTimeNowSec,
@@ -540,7 +536,6 @@ Restart:
 			UID:       inHeader.UID,
 			GID:       inHeader.GID,
 			RDev:      0,
-			BlkSize:   attrBlkSize,
 			Padding:   0,
 		},
 		xattrMap:    sortedmap.NewLLRBTree(sortedmap.CompareByteSlice, globals.xattrMapDummy),
@@ -548,6 +543,8 @@ Restart:
 		fileData:    nil,
 		symlinkData: nil,
 	}
+
+	fixAttrSizes(&dirEntInode.attr)
 
 	ok, err = dirEntInode.dirEntryMap.Put([]byte("."), dirEntInode.attr.Ino)
 	if nil != err {
@@ -591,8 +588,6 @@ Restart:
 			AttrValidNSec:  attrValidNSec,
 			Attr: fission.Attr{
 				Ino:       dirEntInode.attr.Ino,
-				Size:      dirEntInode.attr.Size,
-				Blocks:    dirEntInode.attr.Blocks,
 				ATimeSec:  dirEntInode.attr.ATimeSec,
 				MTimeSec:  dirEntInode.attr.MTimeSec,
 				CTimeSec:  dirEntInode.attr.CTimeSec,
@@ -604,11 +599,12 @@ Restart:
 				UID:       dirEntInode.attr.UID,
 				GID:       dirEntInode.attr.GID,
 				RDev:      dirEntInode.attr.RDev,
-				BlkSize:   attrBlkSize,
 				Padding:   dirEntInode.attr.Padding,
 			},
 		},
 	}
+
+	fixAttrSizes(&mkDirOut.EntryOut.Attr)
 
 	grantedLockSet.freeAll(false)
 
@@ -1097,7 +1093,6 @@ Restart:
 			Attr: fission.Attr{
 				Ino:       oldInode.attr.Ino,
 				Size:      oldInode.attr.Size,
-				Blocks:    oldInode.attr.Blocks,
 				ATimeSec:  oldInode.attr.ATimeSec,
 				MTimeSec:  oldInode.attr.MTimeSec,
 				CTimeSec:  oldInode.attr.CTimeSec,
@@ -1109,11 +1104,12 @@ Restart:
 				UID:       oldInode.attr.UID,
 				GID:       oldInode.attr.GID,
 				RDev:      oldInode.attr.RDev,
-				BlkSize:   attrBlkSize,
 				Padding:   oldInode.attr.Padding,
 			},
 		},
 	}
+
+	fixAttrSizes(&linkOut.EntryOut.Attr)
 
 	grantedLockSet.freeAll(false)
 
@@ -1156,8 +1152,12 @@ Restart:
 		fileInode.fileData = make([]byte, 0)
 	}
 
+	globals.lastFH++
+
+	globals.fhMap[globals.lastFH] = openIn.Flags
+
 	openOut = &fission.OpenOut{
-		FH:        0,
+		FH:        globals.lastFH,
 		OpenFlags: fission.FOpenResponseDirectIO,
 		Padding:   0,
 	}
@@ -1171,6 +1171,7 @@ Restart:
 func (dummy *globalsStruct) DoRead(inHeader *fission.InHeader, readIn *fission.ReadIn) (readOut *fission.ReadOut, errno syscall.Errno) {
 	var (
 		fileInode          *inodeStruct
+		fOpenRequestFlags  uint32
 		granted            bool
 		grantedLockSet     *grantedLockSetStruct = makeGrantedLockSet()
 		ok                 bool
@@ -1179,6 +1180,18 @@ func (dummy *globalsStruct) DoRead(inHeader *fission.InHeader, readIn *fission.R
 
 Restart:
 	grantedLockSet.get(globals.tryLock)
+
+	fOpenRequestFlags, ok = globals.fhMap[readIn.FH]
+	if !ok {
+		grantedLockSet.freeAll(false)
+		errno = syscall.ENOENT
+		return
+	}
+	if 0 != (fOpenRequestFlags & fission.FOpenRequestWRONLY) {
+		grantedLockSet.freeAll(false)
+		errno = syscall.EINVAL
+		return
+	}
 
 	fileInode, ok = globals.inodeMap[inHeader.NodeID]
 	if !ok {
@@ -1226,15 +1239,29 @@ Restart:
 func (dummy *globalsStruct) DoWrite(inHeader *fission.InHeader, writeIn *fission.WriteIn) (writeOut *fission.WriteOut, errno syscall.Errno) {
 	var (
 		fileInode           *inodeStruct
+		fOpenRequestFlags   uint32
 		granted             bool
 		grantedLockSet      *grantedLockSetStruct = makeGrantedLockSet()
 		ok                  bool
 		overwriteSize       uint64
+		writeOffsetActual   uint64
 		writeOffsetPlusSize uint64
 	)
 
 Restart:
 	grantedLockSet.get(globals.tryLock)
+
+	fOpenRequestFlags, ok = globals.fhMap[writeIn.FH]
+	if !ok {
+		grantedLockSet.freeAll(false)
+		errno = syscall.ENOENT
+		return
+	}
+	if 0 != (fOpenRequestFlags & fission.FOpenRequestRDONLY) {
+		grantedLockSet.freeAll(false)
+		errno = syscall.EINVAL
+		return
+	}
 
 	fileInode, ok = globals.inodeMap[inHeader.NodeID]
 	if !ok {
@@ -1255,22 +1282,28 @@ Restart:
 		return
 	}
 
+	if 0 == (fOpenRequestFlags & fission.FOpenRequestAPPEND) {
+		writeOffsetActual = writeIn.Offset
+	} else {
+		writeOffsetActual = fileInode.attr.Size
+	}
+
 	writeOffsetPlusSize = writeIn.Offset + uint64(writeIn.Size)
 
-	if writeIn.Offset < fileInode.attr.Size {
+	if writeOffsetActual < fileInode.attr.Size {
 		if writeOffsetPlusSize <= fileInode.attr.Size {
-			_ = copy(fileInode.fileData[writeIn.Offset:writeOffsetPlusSize], writeIn.Data)
+			_ = copy(fileInode.fileData[writeOffsetActual:writeOffsetPlusSize], writeIn.Data)
 		} else {
-			overwriteSize = fileInode.attr.Size - writeIn.Offset
+			overwriteSize = fileInode.attr.Size - writeOffsetActual
 
-			_ = copy(fileInode.fileData[writeIn.Offset:], writeIn.Data[:overwriteSize])
+			_ = copy(fileInode.fileData[writeOffsetActual:], writeIn.Data[:overwriteSize])
 			fileInode.fileData = append(fileInode.fileData, writeIn.Data[overwriteSize:]...)
 
 			fileInode.attr.Size = writeOffsetPlusSize
 		}
 	} else {
-		if writeIn.Offset > fileInode.attr.Size {
-			fileInode.fileData = append(fileInode.fileData, make([]byte, (writeIn.Offset-fileInode.attr.Size))...)
+		if writeOffsetActual > fileInode.attr.Size {
+			fileInode.fileData = append(fileInode.fileData, make([]byte, (writeOffsetActual-fileInode.attr.Size))...)
 		}
 
 		fileInode.fileData = append(fileInode.fileData, writeIn.Data...)
@@ -1325,6 +1358,13 @@ func (dummy *globalsStruct) DoRelease(inHeader *fission.InHeader, releaseIn *fis
 Restart:
 	grantedLockSet.get(globals.tryLock)
 
+	_, ok = globals.fhMap[releaseIn.FH]
+	if !ok {
+		grantedLockSet.freeAll(false)
+		errno = syscall.ENOENT
+		return
+	}
+
 	fileInode, ok = globals.inodeMap[inHeader.NodeID]
 	if !ok {
 		grantedLockSet.freeAll(false)
@@ -1343,6 +1383,8 @@ Restart:
 		errno = syscall.EINVAL
 		return
 	}
+
+	delete(globals.fhMap, releaseIn.FH)
 
 	if 0 == fileInode.attr.NLink {
 		delete(globals.inodeMap, inHeader.NodeID)
@@ -1680,7 +1722,11 @@ func (dummy *globalsStruct) DoInit(inHeader *fission.InHeader, initIn *fission.I
 		Flags:                initOutFlagsNearlyAll,
 		MaxBackground:        initOutMaxBackgound,
 		CongestionThreshhold: initOutCongestionThreshhold,
-		MaxWrite:             initOutMaxWrite,
+		MaxWrite:             maxWrite,
+		TimeGran:             0, // accept default
+		MaxPages:             maxPages,
+		Padding:              0,
+		Unused:               [8]uint32{0, 0, 0, 0, 0, 0, 0, 0},
 	}
 
 	errno = 0
@@ -2144,7 +2190,6 @@ Restart:
 		attr: fission.Attr{
 			Ino:       globals.lastNodeID,
 			Size:      0,
-			Blocks:    0,
 			ATimeSec:  unixTimeNowSec,
 			MTimeSec:  unixTimeNowSec,
 			CTimeSec:  unixTimeNowSec,
@@ -2156,7 +2201,6 @@ Restart:
 			UID:       inHeader.UID,
 			GID:       inHeader.GID,
 			RDev:      0,
-			BlkSize:   attrBlkSize,
 			Padding:   0,
 		},
 		xattrMap:    sortedmap.NewLLRBTree(sortedmap.CompareByteSlice, globals.xattrMapDummy),
@@ -2164,6 +2208,8 @@ Restart:
 		fileData:    make([]byte, 0),
 		symlinkData: nil,
 	}
+
+	fixAttrSizes(&fileInode.attr)
 
 	ok, err = dirInode.dirEntryMap.Put(createIn.Name, fileInode.attr.Ino)
 	if nil != err {
@@ -2177,6 +2223,10 @@ Restart:
 
 	globals.inodeMap[fileInode.attr.Ino] = fileInode
 
+	globals.lastFH++
+
+	globals.fhMap[globals.lastFH] = createIn.Flags
+
 	createOut = &fission.CreateOut{
 		EntryOut: fission.EntryOut{
 			NodeID:         fileInode.attr.Ino,
@@ -2188,7 +2238,6 @@ Restart:
 			Attr: fission.Attr{
 				Ino:       fileInode.attr.Ino,
 				Size:      fileInode.attr.Size,
-				Blocks:    fileInode.attr.Blocks,
 				ATimeSec:  fileInode.attr.ATimeSec,
 				MTimeSec:  fileInode.attr.MTimeSec,
 				CTimeSec:  fileInode.attr.CTimeSec,
@@ -2200,14 +2249,15 @@ Restart:
 				UID:       fileInode.attr.UID,
 				GID:       fileInode.attr.GID,
 				RDev:      fileInode.attr.RDev,
-				BlkSize:   attrBlkSize,
 				Padding:   fileInode.attr.Padding,
 			},
 		},
-		FH:        0,
+		FH:        globals.lastFH,
 		OpenFlags: fission.FOpenResponseDirectIO,
 		Padding:   0,
 	}
+
+	fixAttrSizes(&createOut.EntryOut.Attr)
 
 	grantedLockSet.freeAll(false)
 
@@ -2346,7 +2396,6 @@ Restart:
 				Attr: fission.Attr{
 					Ino:       dirEntInode.attr.Ino,
 					Size:      dirEntInode.attr.Size,
-					Blocks:    dirEntInode.attr.Blocks,
 					ATimeSec:  dirEntInode.attr.ATimeSec,
 					MTimeSec:  dirEntInode.attr.MTimeSec,
 					CTimeSec:  dirEntInode.attr.CTimeSec,
@@ -2358,7 +2407,6 @@ Restart:
 					UID:       dirEntInode.attr.UID,
 					GID:       dirEntInode.attr.GID,
 					RDev:      dirEntInode.attr.RDev,
-					BlkSize:   attrBlkSize,
 					Padding:   dirEntInode.attr.Padding,
 				},
 			},
@@ -2370,6 +2418,8 @@ Restart:
 				Name:    cloneByteSlice(dirEntNameAsByteSlice),
 			},
 		}
+
+		fixAttrSizes(&readDirPlusOut.DirEntPlus[dirEntPlusIndex].EntryOut.Attr)
 	}
 
 	grantedLockSet.freeAll(false)
@@ -2613,4 +2663,16 @@ Restart:
 func (dummy *globalsStruct) DoLSeek(inHeader *fission.InHeader, lSeekIn *fission.LSeekIn) (lSeekOut *fission.LSeekOut, errno syscall.Errno) {
 	errno = syscall.ENOSYS
 	return
+}
+
+func fixAttrSizes(attr *fission.Attr) {
+	if syscall.S_IFREG == (attr.Mode & syscall.S_IFMT) {
+		attr.Blocks = attr.Size + (uint64(attrBlkSize) - 1)
+		attr.Blocks /= uint64(attrBlkSize)
+		attr.BlkSize = attrBlkSize
+	} else {
+		attr.Size = 0
+		attr.Blocks = 0
+		attr.BlkSize = 0
+	}
 }

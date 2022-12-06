@@ -15,9 +15,9 @@ import (
 
 	"golang.org/x/sys/unix"
 
-	"github.com/swiftstack/sortedmap"
+	"github.com/NVIDIA/sortedmap"
 
-	"github.com/swiftstack/fission"
+	"github.com/NVIDIA/fission"
 )
 
 const (
@@ -37,9 +37,12 @@ const (
 
 	initOutMaxBackgound         = uint16(100)
 	initOutCongestionThreshhold = uint16(0)
-	initOutMaxWrite             = uint32(128 * 1024) // 128KiB... the max write size in Linux FUSE at this time
 
-	attrBlkSize = uint32(4096)
+	maxPages = 256                     // * 4KiB page size == 1MiB... the max read or write size in Linux FUSE at this time
+	maxRead  = uint32(maxPages * 4096) //                     1MiB... the max read          size in Linux FUSE at this time
+	maxWrite = uint32(maxPages * 4096) //                     1MiB... the max         write size in Linux FUSE at this time
+
+	attrBlkSize = uint32(512)
 
 	entryValidSec  = uint64(10)
 	entryValidNSec = uint32(0)
@@ -94,8 +97,10 @@ type globalsStruct struct {
 	errChan               chan error
 	xattrMapDummy         *xattrMapDummyStruct
 	dirEntryMapDummy      *dirEntryMapDummyStruct
-	inodeMap              map[uint64]*inodeStruct // key is inodeStruct.atr.Ino
+	inodeMap              map[uint64]*inodeStruct // key is inodeStruct.attr.Ino
 	lastNodeID            uint64                  // valid NodeID's start at 1... but 1 is the RootDir NodeID
+	fhMap                 map[uint64]uint32       // key is FH; value is {create|open}In.Flags
+	lastFH                uint64
 	alreadyLoggedIgnoring alreadyLoggedIgnoringStruct
 	volume                fission.Volume
 }
@@ -138,8 +143,6 @@ func main() {
 		tryLock: makeTryLock(),
 		attr: fission.Attr{
 			Ino:       1,
-			Size:      0,
-			Blocks:    0,
 			ATimeSec:  unixTimeNowSec,
 			MTimeSec:  unixTimeNowSec,
 			CTimeSec:  unixTimeNowSec,
@@ -151,7 +154,6 @@ func main() {
 			UID:       0,
 			GID:       0,
 			RDev:      0,
-			BlkSize:   attrBlkSize,
 			Padding:   0,
 		},
 		xattrMap:    sortedmap.NewLLRBTree(sortedmap.CompareByteSlice, globals.xattrMapDummy),
@@ -159,6 +161,8 @@ func main() {
 		fileData:    nil,
 		symlinkData: nil,
 	}
+
+	fixAttrSizes(&rootInode.attr)
 
 	ok, err = rootInode.dirEntryMap.Put([]byte("."), uint64(1))
 	if nil != err {
@@ -185,9 +189,13 @@ func main() {
 
 	globals.lastNodeID = uint64(1) // since we used NodeID 1 for the RootDir NodeID
 
+	globals.fhMap = make(map[uint64]uint32)
+
+	globals.lastFH = 0
+
 	globals.alreadyLoggedIgnoring.setAttrInValidFH = false
 
-	globals.volume = fission.NewVolume(globals.volumeName, globals.mountPoint, fuseSubtype, initOutMaxWrite, &globals, globals.logger, globals.errChan)
+	globals.volume = fission.NewVolume(globals.volumeName, globals.mountPoint, fuseSubtype, maxRead, maxWrite, false, false, &globals, globals.logger, globals.errChan)
 
 	err = globals.volume.DoMount()
 	if nil != err {
@@ -209,7 +217,7 @@ func main() {
 	err = globals.volume.DoUnmount()
 	if nil != err {
 		globals.logger.Printf("fission.DoUnmount() failed: %v", err)
-		os.Exit(2)
+		os.Exit(1)
 	}
 }
 

@@ -24,7 +24,6 @@ const (
 
 func (volume *volumeStruct) DoMount() (err error) {
 	var (
-		allowOtherOption         string
 		childOpenFDs             []int
 		fsnameOption             string
 		fuseSubtypeOption        string
@@ -35,6 +34,7 @@ func (volume *volumeStruct) DoMount() (err error) {
 		fusermountSocketPair     [2]int
 		gid                      int
 		gidOption                string
+		maxReadOption            string
 		mountCmd                 *exec.Cmd
 		mountCmdStderrPipe       io.ReadCloser
 		mountCmdStdoutPipe       io.ReadCloser
@@ -98,14 +98,21 @@ func (volume *volumeStruct) DoMount() (err error) {
 
 	uidOption = fmt.Sprintf("user_id=%d", uid)
 	gidOption = fmt.Sprintf("group_id=%d", gid)
-	allowOtherOption = "allow_other"
 	fsnameOption = "fsname=" + volume.volumeName
+	maxReadOption = fmt.Sprintf("max_read=%d", volume.maxRead)
 
 	mountOptions = rootModeOption +
 		"," + uidOption +
 		"," + gidOption +
-		"," + allowOtherOption +
-		"," + fsnameOption
+		"," + fsnameOption +
+		"," + maxReadOption
+
+	if volume.defaultPermissions {
+		mountOptions += ",default_permissions"
+	}
+	if volume.allowOther {
+		mountOptions += ",allow_other"
+	}
 
 	if "" != volume.fuseSubtype {
 		fuseSubtypeOption = "subtype=" + volume.fuseSubtype

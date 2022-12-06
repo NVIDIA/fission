@@ -1,0 +1,6 @@
+github.com/NVIDIA/cstruct v0.0.0-20221206222058-cbc877f192d5 h1:u9jQ3H8RSqtqTu7b+oACnChS7HsVpbV46/qBJPVCBjU=
+github.com/NVIDIA/cstruct v0.0.0-20221206222058-cbc877f192d5/go.mod h1:s/x+WQqgkcAbDPltLPIs0AwqxY7W6UG0RGhuMVy8tds=
+github.com/NVIDIA/sortedmap v0.0.0-20221206223250-5aaf17459438 h1:0TZfWYaOMyrK2aiyf5KcX9rxFyVapg8m1zd8AWBefwE=
+github.com/NVIDIA/sortedmap v0.0.0-20221206223250-5aaf17459438/go.mod h1:uTjxdPdujmeJm/c1BNApnnX4KW+9nYmt0L6Ijft1+M4=
+golang.org/x/sys v0.3.0 h1:w8ZOecv6NaNa/zC8944JTU3vz4u6Lagfk4RPQxv92NQ=
+golang.org/x/sys v0.3.0/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=

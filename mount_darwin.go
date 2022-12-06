@@ -21,7 +21,6 @@ const (
 
 func (volume *volumeStruct) DoMount() (err error) {
 	var (
-		allowOtherOption              string
 		devOsxFusePath                string
 		devOsxFusePathList            []string
 		fsnameOption                  string
@@ -81,22 +80,27 @@ func (volume *volumeStruct) DoMount() (err error) {
 
 	// Compute mountOptions
 
-	allowOtherOption = "allow_other"
 	localOption = "local"
 	noAppleDoubleOption = "noappledouble"
 	noAppleXattrOption = "noapplexattr"
 	fsnameOption = "fsname=" + volume.volumeName
 	volnameOption = "volname=" + volume.volumeName
 
-	iosizeOption = fmt.Sprintf("iosize=%d", volume.initOutMaxWrite)
+	iosizeOption = fmt.Sprintf("iosize=%d", volume.maxWrite)
 
-	mountOptions = allowOtherOption +
-		"," + localOption +
+	mountOptions = localOption +
 		"," + noAppleDoubleOption +
 		"," + noAppleXattrOption +
 		"," + fsnameOption +
 		"," + volnameOption +
 		"," + iosizeOption
+
+	if volume.defaultPermissions {
+		mountOptions += ",default_permissions"
+	}
+	if volume.allowOther {
+		mountOptions += ",allow_other"
+	}
 
 	// Find an available FUSE device file
 

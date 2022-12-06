@@ -14,7 +14,7 @@ import (
 
 	"golang.org/x/sys/unix"
 
-	"github.com/swiftstack/fission"
+	"github.com/NVIDIA/fission"
 )
 
 const (
@@ -34,9 +34,12 @@ const (
 
 	initOutMaxBackgound         = uint16(100)
 	initOutCongestionThreshhold = uint16(0)
-	initOutMaxWrite             = uint32(128 * 1024) // 128KiB... the max write size in Linux FUSE at this time
 
-	attrBlkSize = 4096
+	maxPages = 256                     // * 4KiB page size == 1MiB... the max read or write size in Linux FUSE at this time
+	maxRead  = uint32(maxPages * 4096) //                     1MiB... the max read          size in Linux FUSE at this time
+	maxWrite = uint32(maxPages * 4096) //                     1MiB... the max         write size in Linux FUSE at this time
+
+	attrBlkSize = uint32(512)
 
 	accessROK = syscall.S_IROTH // surprisingly not defined as syscall.R_OK
 	accessWOK = syscall.S_IWOTH // surprisingly not defined as syscall.W_OK
@@ -102,8 +105,6 @@ func main() {
 
 	globals.rootInodeAttr = &fission.Attr{
 		Ino:       rootInodeIno,
-		Size:      0,
-		Blocks:    0,
 		ATimeSec:  unixTimeNowSec,
 		MTimeSec:  unixTimeNowSec,
 		CTimeSec:  unixTimeNowSec,
@@ -115,14 +116,14 @@ func main() {
 		UID:       0,
 		GID:       0,
 		RDev:      0,
-		BlkSize:   attrBlkSize,
 		Padding:   0,
 	}
+
+	fixAttrSizes(globals.rootInodeAttr)
 
 	globals.helloInodeAttr = &fission.Attr{
 		Ino:       helloInodeIno,
 		Size:      uint64(len(helloInodeFileData)),
-		Blocks:    1,
 		ATimeSec:  unixTimeNowSec,
 		MTimeSec:  unixTimeNowSec,
 		CTimeSec:  unixTimeNowSec,
@@ -134,9 +135,10 @@ func main() {
 		UID:       0,
 		GID:       0,
 		RDev:      0,
-		BlkSize:   attrBlkSize,
 		Padding:   0,
 	}
+
+	fixAttrSizes(globals.helloInodeAttr)
 
 	globals.dirEnt = []fission.DirEnt{
 		fission.DirEnt{
@@ -270,7 +272,7 @@ func main() {
 		},
 	}
 
-	globals.volume = fission.NewVolume(globals.volumeName, globals.mountPoint, fuseSubtype, initOutMaxWrite, &globals, globals.logger, globals.errChan)
+	globals.volume = fission.NewVolume(globals.volumeName, globals.mountPoint, fuseSubtype, maxRead, maxWrite, false, false, &globals, globals.logger, globals.errChan)
 
 	err = globals.volume.DoMount()
 	if nil != err {
@@ -292,7 +294,7 @@ func main() {
 	err = globals.volume.DoUnmount()
 	if nil != err {
 		globals.logger.Printf("fission.DoUnmount() failed: %v", err)
-		os.Exit(2)
+		os.Exit(1)
 	}
 }
 

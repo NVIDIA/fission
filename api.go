@@ -14,7 +14,6 @@ import (
 // to see the various callbacks listed in the Callbacks interface. This will
 // continue a single call to DoUnmount() is made after which the Volume instance
 // may be safely discarded.
-//
 type Volume interface {
 	// DoMount is invoked on a Volume interface to perform the FUSE mount and
 	// begin receiving the various callbacks listed in the Callbacks interface.
@@ -37,7 +36,6 @@ type Volume interface {
 // /dev/fuse read loop (including, of course, the reception of the InitIn up-call).
 // The implementation of DoInit, therefore, should not expect returning an InitOut
 // with a different MaxWrite to be honored.
-//
 type Callbacks interface {
 	DoLookup(inHeader *InHeader, lookupIn *LookupIn) (lookupOut *LookupOut, errno syscall.Errno)
 	DoForget(inHeader *InHeader, forgetIn *ForgetIn)
@@ -83,17 +81,15 @@ type Callbacks interface {
 	DoLSeek(inHeader *InHeader, lSeekIn *LSeekIn) (lSeekOut *LSeekOut, errno syscall.Errno)
 }
 
-// NewVolume is called to create a Volume instance. Various callbacks listed in the Callbacks interface
-// will be made while the Volume is mounted. The type of the file system, once mounted, will be "fuse"
-// and, if non-empty, followed by a "." and the fuseSubtype (if supported... as it is on Linux). Note
-// that the caller provides a value for InitOut.MaxWrite at the time the Volume instance is provisioned
-// so that the package may properly setup the read loop against /dev/fuse prior to reception of an InitIn
-// request. A chan error is also supplied to enable the Volume to indicate that it is no longer servicing
-// FUSE upcalls (e.g. as a result of an intentional DoUnmount() call or some unexpected error reading
-// from /dev/fuse).
-//
-func NewVolume(volumeName string, mountpointDirPath string, fuseSubtype string, initOutMaxWrite uint32, callbacks Callbacks, logger *log.Logger, errChan chan error) (volume Volume) {
-	volume = newVolume(volumeName, mountpointDirPath, fuseSubtype, initOutMaxWrite, callbacks, logger, errChan)
+// NewVolume is called to create a Volume instance. Various callbacks listed in the Callbacks
+// interface will be made while the Volume is mounted. The type of the file system, once mounted,
+// will be "fuse" and, if non-empty, followed by a "." and the fuseSubtype (if supported... as it
+// is on Linux). Non-root users may want to specify allowOther as TRUE to enable other non-root
+// users access to the mount point. A chan error is also supplied to enable the Volume to indicate
+// that it is no longer servicing FUSE upcalls (e.g. as a result of an intentional DoUnmount() call
+// or some unexpected error reading from /dev/fuse).
+func NewVolume(volumeName string, mountpointDirPath string, fuseSubtype string, maxRead uint32, maxWrite uint32, defaultPermissions bool, allowOther bool, callbacks Callbacks, logger *log.Logger, errChan chan error) (volume Volume) {
+	volume = newVolume(volumeName, mountpointDirPath, fuseSubtype, maxRead, maxWrite, defaultPermissions, allowOther, callbacks, logger, errChan)
 	return
 }
 
@@ -141,6 +137,11 @@ const (
 	SetAttrInValidChgTime  = uint32(1) << 29 // darwin only
 	SetAttrInValidBkupTime = uint32(1) << 30 // darwin only
 	SetAttrInValidFlags    = uint32(1) << 31 // darwin only
+)
+
+const (
+	SetXAttrInCreate  = uint32(1)
+	SetXAttrInReplace = uint32(2)
 )
 
 const (
@@ -565,7 +566,7 @@ type FSyncIn struct {
 
 type SetXAttrIn struct {
 	Size     uint32 // == len(Name) + 1 + len(Data)
-	Flags    uint32
+	Flags    uint32 // if not 0, either of SetXAttrIn*
 	Position uint32 // darwin only - set to zero otherwise
 	Padding  uint32 // darwin only
 	Name     []byte
@@ -628,7 +629,8 @@ type InitIn struct {
 	Flags        uint32 // mask of const InitFlags* bits
 }
 
-const InitOutSize = 24
+const InitOutSizePre_7_28 = 24
+const InitOutSize = 64
 
 type InitOut struct {
 	Major                uint32
@@ -638,6 +640,10 @@ type InitOut struct {
 	MaxBackground        uint16
 	CongestionThreshhold uint16
 	MaxWrite             uint32
+	TimeGran             uint32    // starting at 7.28
+	MaxPages             uint16    // starting at 7.28
+	Padding              uint16    // starting at 7.28
+	Unused               [8]uint32 // starting at 7.28
 }
 
 const OpenDirInSize = 8
