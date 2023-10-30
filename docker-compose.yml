@@ -1,0 +1,35 @@
+# Copyright (c) 2023, NVIDIA CORPORATION.
+# SPDX-License-Identifier: Apache-2.0
+
+version: '3.8'
+
+services:
+  swift:
+    image: dockerswiftaio/docker-swift:2.29.0
+    container_name: swift
+    expose:
+      - 8080
+    ports:
+      - target: 8080
+        published: 8080
+        protocol: tcp
+        mode: host
+  dev:
+    build:
+      context: .
+    container_name: dev
+    depends_on:
+      - swift
+    cap_add:
+      - SYS_ADMIN
+    devices:
+      - '/dev/fuse'
+    privileged: true
+    volumes:
+      - type: bind
+        source: .
+        target: /fission
+    environment:
+      - S3AccessKey=test:tester
+      - S3SecretKey=testing
+    command: [ "sleep", "infinity" ]

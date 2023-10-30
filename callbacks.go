@@ -1,4 +1,4 @@
-// Copyright (c) 2015-2021, NVIDIA CORPORATION.
+// Copyright (c) 2015-2023, NVIDIA CORPORATION.
 // SPDX-License-Identifier: Apache-2.0
 
 package fission
@@ -8,6 +8,25 @@ import (
 	"syscall"
 	"unsafe"
 )
+
+func marshalAttr(attr *Attr, outPayload []byte, outPayloadOffset uint32) {
+	*(*uint64)(unsafe.Pointer(&outPayload[outPayloadOffset+0])) = attr.Ino
+	*(*uint64)(unsafe.Pointer(&outPayload[outPayloadOffset+8])) = attr.Size
+	*(*uint64)(unsafe.Pointer(&outPayload[outPayloadOffset+16])) = attr.Blocks
+	*(*uint64)(unsafe.Pointer(&outPayload[outPayloadOffset+24])) = attr.ATimeSec
+	*(*uint64)(unsafe.Pointer(&outPayload[outPayloadOffset+32])) = attr.MTimeSec
+	*(*uint64)(unsafe.Pointer(&outPayload[outPayloadOffset+40])) = attr.CTimeSec
+	*(*uint32)(unsafe.Pointer(&outPayload[outPayloadOffset+48])) = attr.ATimeNSec
+	*(*uint32)(unsafe.Pointer(&outPayload[outPayloadOffset+52])) = attr.MTimeNSec
+	*(*uint32)(unsafe.Pointer(&outPayload[outPayloadOffset+56])) = attr.CTimeNSec
+	*(*uint32)(unsafe.Pointer(&outPayload[outPayloadOffset+60])) = attr.Mode
+	*(*uint32)(unsafe.Pointer(&outPayload[outPayloadOffset+64])) = attr.NLink
+	*(*uint32)(unsafe.Pointer(&outPayload[outPayloadOffset+68])) = attr.UID
+	*(*uint32)(unsafe.Pointer(&outPayload[outPayloadOffset+72])) = attr.GID
+	*(*uint32)(unsafe.Pointer(&outPayload[outPayloadOffset+76])) = attr.RDev
+	*(*uint32)(unsafe.Pointer(&outPayload[outPayloadOffset+80])) = attr.BlkSize
+	*(*uint32)(unsafe.Pointer(&outPayload[outPayloadOffset+84])) = attr.Padding
+}
 
 func (volume *volumeStruct) doLookup(inHeader *InHeader, devFuseFDReadBufPayload []byte) {
 	var (
@@ -97,18 +116,35 @@ func (volume *volumeStruct) doGetAttr(inHeader *InHeader, devFuseFDReadBufPayloa
 
 func (volume *volumeStruct) doSetAttr(inHeader *InHeader, devFuseFDReadBufPayload []byte) {
 	var (
-		err        error
 		errno      syscall.Errno
 		outPayload []byte
 		setAttrIn  *SetAttrIn
 		setAttrOut *SetAttrOut
 	)
 
-	setAttrIn, err = unmarshalSetAttrIn(devFuseFDReadBufPayload)
-	if nil != err {
-		volume.logger.Printf("Call to doSetAttr() found %v", err)
+	if len(devFuseFDReadBufPayload) != SetAttrInSize {
+		volume.logger.Printf("Call to doSetAttr() with bad len(devFuseFDReadBufPayload) == %v", len(devFuseFDReadBufPayload))
 		volume.devFuseFDWriter(inHeader, syscall.EINVAL)
 		return
+	}
+
+	setAttrIn = &SetAttrIn{
+		Valid:     *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[0])),
+		Padding:   *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[4])),
+		FH:        *(*uint64)(unsafe.Pointer(&devFuseFDReadBufPayload[8])),
+		Size:      *(*uint64)(unsafe.Pointer(&devFuseFDReadBufPayload[16])),
+		LockOwner: *(*uint64)(unsafe.Pointer(&devFuseFDReadBufPayload[24])),
+		ATimeSec:  *(*uint64)(unsafe.Pointer(&devFuseFDReadBufPayload[32])),
+		MTimeSec:  *(*uint64)(unsafe.Pointer(&devFuseFDReadBufPayload[40])),
+		Unused2:   *(*uint64)(unsafe.Pointer(&devFuseFDReadBufPayload[48])),
+		ATimeNSec: *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[56])),
+		MTimeNSec: *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[60])),
+		Unused3:   *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[64])),
+		Mode:      *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[68])),
+		Unused4:   *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[72])),
+		UID:       *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[76])),
+		GID:       *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[80])),
+		Unused5:   *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[84])),
 	}
 
 	setAttrOut, errno = volume.callbacks.DoSetAttr(inHeader, setAttrIn)
@@ -578,14 +614,38 @@ func (volume *volumeStruct) doFSync(inHeader *InHeader, devFuseFDReadBufPayload 
 
 func (volume *volumeStruct) doSetXAttr(inHeader *InHeader, devFuseFDReadBufPayload []byte) {
 	var (
-		err        error
-		errno      syscall.Errno
-		setXAttrIn *SetXAttrIn
+		errno          syscall.Errno
+		nameDataSplit  [][]byte
+		setXAttrIn     *SetXAttrIn
+		setXAttrInSize int
 	)
 
-	setXAttrIn, err = unmarshalSetXAttrIn(devFuseFDReadBufPayload)
-	if nil != err {
-		volume.logger.Printf("Call to doSetXAttr() found %v", err)
+	if len(devFuseFDReadBufPayload) < SetXAttrInFixedPortionSize {
+		volume.logger.Printf("Call to doSetXAttr() with bad len(devFuseFDReadBufPayload) == %v", len(devFuseFDReadBufPayload))
+		volume.devFuseFDWriter(inHeader, syscall.EINVAL)
+		return
+	}
+
+	nameDataSplit = bytes.SplitN(devFuseFDReadBufPayload[SetXAttrInFixedPortionSize:], []byte{0}, 2)
+	if len(nameDataSplit) != 2 {
+		volume.logger.Printf("Call to doSetXAttr() with bad devFuseFDReadBufPayload")
+		volume.devFuseFDWriter(inHeader, syscall.EINVAL)
+		return
+	}
+
+	setXAttrIn = &SetXAttrIn{
+		Size:          *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[0])),
+		Flags:         *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[4])),
+		SetXAttrFlags: *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[8])),
+		Padding:       *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[12])),
+		Name:          cloneByteSlice(nameDataSplit[0], false),
+		Data:          cloneByteSlice(nameDataSplit[1], true),
+	}
+
+	setXAttrInSize = SetXAttrInFixedPortionSize + len(setXAttrIn.Name) + 1 + len(setXAttrIn.Data)
+
+	if len(devFuseFDReadBufPayload) != setXAttrInSize {
+		volume.logger.Printf("Call to doSetXAttr() with bad Size == %v expected %v", setXAttrIn.Size, setXAttrInSize)
 		volume.devFuseFDWriter(inHeader, syscall.EINVAL)
 		return
 	}
@@ -597,18 +657,22 @@ func (volume *volumeStruct) doSetXAttr(inHeader *InHeader, devFuseFDReadBufPaylo
 
 func (volume *volumeStruct) doGetXAttr(inHeader *InHeader, devFuseFDReadBufPayload []byte) {
 	var (
-		err         error
 		errno       syscall.Errno
 		getXAttrIn  *GetXAttrIn
 		getXAttrOut *GetXAttrOut
 		outPayload  []byte
 	)
 
-	getXAttrIn, err = unmarshalGetXAttrIn(devFuseFDReadBufPayload)
-	if nil != err {
-		volume.logger.Printf("Call to doGetXAttr() found %v", err)
+	if len(devFuseFDReadBufPayload) < GetXAttrInFixedPortionSize {
+		volume.logger.Printf("Call to doGetXAttr() with bad len(devFuseFDReadBufPayload) == %v", len(devFuseFDReadBufPayload))
 		volume.devFuseFDWriter(inHeader, syscall.EINVAL)
 		return
+	}
+
+	getXAttrIn = &GetXAttrIn{
+		Size:    *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[0])),
+		Padding: *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[4])),
+		Name:    cloneByteSlice(devFuseFDReadBufPayload[GetXAttrInFixedPortionSize:], true),
 	}
 
 	getXAttrOut, errno = volume.callbacks.DoGetXAttr(inHeader, getXAttrIn)
@@ -763,19 +827,15 @@ func (volume *volumeStruct) doInit(inHeader *InHeader, devFuseFDReadBufPayload [
 	*(*uint32)(unsafe.Pointer(&outPayload[20])) = initOut.MaxWrite
 	*(*uint32)(unsafe.Pointer(&outPayload[24])) = initOut.TimeGran
 	*(*uint16)(unsafe.Pointer(&outPayload[28])) = initOut.MaxPages
-	*(*uint16)(unsafe.Pointer(&outPayload[30])) = initOut.Padding
-	*(*uint32)(unsafe.Pointer(&outPayload[32])) = initOut.Unused[0]
-	*(*uint32)(unsafe.Pointer(&outPayload[36])) = initOut.Unused[1]
-	*(*uint32)(unsafe.Pointer(&outPayload[40])) = initOut.Unused[2]
-	*(*uint32)(unsafe.Pointer(&outPayload[44])) = initOut.Unused[3]
-	*(*uint32)(unsafe.Pointer(&outPayload[48])) = initOut.Unused[4]
-	*(*uint32)(unsafe.Pointer(&outPayload[52])) = initOut.Unused[5]
-	*(*uint32)(unsafe.Pointer(&outPayload[56])) = initOut.Unused[6]
-	*(*uint32)(unsafe.Pointer(&outPayload[60])) = initOut.Unused[7]
-
-	if (initOut.Major < 7) || ((initOut.Major == 7) && (initOut.Minor < 28)) {
-		outPayload = outPayload[:InitOutSizePre_7_28]
-	}
+	*(*uint16)(unsafe.Pointer(&outPayload[30])) = initOut.MapAlignment
+	*(*uint32)(unsafe.Pointer(&outPayload[32])) = initOut.Flags2
+	*(*uint32)(unsafe.Pointer(&outPayload[36])) = initOut.Unused[0]
+	*(*uint32)(unsafe.Pointer(&outPayload[40])) = initOut.Unused[1]
+	*(*uint32)(unsafe.Pointer(&outPayload[44])) = initOut.Unused[2]
+	*(*uint32)(unsafe.Pointer(&outPayload[48])) = initOut.Unused[3]
+	*(*uint32)(unsafe.Pointer(&outPayload[52])) = initOut.Unused[4]
+	*(*uint32)(unsafe.Pointer(&outPayload[56])) = initOut.Unused[5]
+	*(*uint32)(unsafe.Pointer(&outPayload[60])) = initOut.Unused[6]
 
 	volume.devFuseFDWriter(inHeader, 0, outPayload)
 }
