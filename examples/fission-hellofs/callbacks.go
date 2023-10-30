@@ -1,4 +1,4 @@
-// Copyright (c) 2015-2021, NVIDIA CORPORATION.
+// Copyright (c) 2015-2023, NVIDIA CORPORATION.
 // SPDX-License-Identifier: Apache-2.0
 
 package main
@@ -267,8 +267,9 @@ func (dummy *globalsStruct) DoInit(inHeader *fission.InHeader, initIn *fission.I
 		MaxWrite:             maxWrite,
 		TimeGran:             0, // accept default
 		MaxPages:             maxPages,
-		Padding:              0,
-		Unused:               [8]uint32{0, 0, 0, 0, 0, 0, 0, 0},
+		MapAlignment:         0, // accept default
+		Flags2:               0,
+		Unused:               [7]uint32{0, 0, 0, 0, 0, 0, 0},
 	}
 
 	errno = 0

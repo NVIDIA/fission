@@ -1,4 +1,4 @@
-// Copyright (c) 2015-2021, NVIDIA CORPORATION.
+// Copyright (c) 2015-2023, NVIDIA CORPORATION.
 // SPDX-License-Identifier: Apache-2.0
 
 package main
@@ -17,6 +17,11 @@ import (
 	"github.com/NVIDIA/fission"
 	"github.com/NVIDIA/sortedmap"
 )
+
+func fixAttr(attr *fission.Attr) {
+	attr.Blocks = (attr.Size + uint64(attrBlkSize) - 1) / uint64(attrBlkSize)
+	attr.BlkSize = attrBlkSize
+}
 
 func (fileInode *fileInodeStruct) ensureAttrInCache() {
 	var (
@@ -64,7 +69,7 @@ RetryAfterReAuth:
 
 	authToken = fetchAuthToken()
 	if "" != authToken {
-		httpRequest.Header["X-Auth-Token"] = []string{authToken}
+		httpRequest.Header["X-Auth-Token"DoMount] = []string{authToken}
 	}
 
 	httpResponse, err = globals.httpClient.Do(httpRequest)
@@ -580,8 +585,9 @@ func (dummy *globalsStruct) DoInit(inHeader *fission.InHeader, initIn *fission.I
 		MaxWrite:             maxWrite,
 		TimeGran:             0, // accept default
 		MaxPages:             maxPages,
-		Padding:              0,
-		Unused:               [8]uint32{0, 0, 0, 0, 0, 0, 0, 0},
+		MapAlignment:         0, // accept default
+		Flags2:               0,
+		Unused:               [7]uint32{0, 0, 0, 0, 0, 0, 0},
 	}
 
 	errno = 0
