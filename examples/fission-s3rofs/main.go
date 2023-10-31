@@ -86,7 +86,8 @@ type inodeStruct struct {
 	inodeNumber uint64
 	linkCount   uint64
 	mode        uint32             // & syscall.S_IFMT will be either syscall.S_IFDIR or syscall.S_IFREG
-	dirTable    sortedmap.LLRBTree // [only for syscall.S_IFDIR] key == string "name"; value == inodeNumber
+	dirTable    sortedmap.LLRBTree // [only for syscall.S_IFDIR] key == string "basename"; value == inodeNumber
+	objectKey   string             // [only for syscall.S_IFREG] S3
 	fileSize    int64              // [only for syscall.S_IFREG] a value < 0 means not yet fetched
 }
 
@@ -94,23 +95,30 @@ type globalsStruct struct {
 	config     *configStruct
 	logger     *log.Logger
 	s3Client   *s3.Client
-	inodeTable sortedmap.LLRBTree // key == uint64(inodeNumber); value == *inodeStruct
+	inodeTable []*inodeStruct // index == uint64(inodeNumber - 1)
 }
 
 var globals globalsStruct
 
 func main() {
 	var (
-		configAsJSON                       []byte
-		configFileContent                  []byte
-		err                                error
-		found                              bool
-		inode                              *inodeStruct
+		childInode              *inodeStruct
+		childInodeNumber        uint64
+		childInodeNumberAsValue sortedmap.Value
+		configAsJSON            []byte
+		configFileContent       []byte
+		err                     error
+		found                   bool
+		// inodeNumber                        uint64
 		listObjectsV2Input                 *s3.ListObjectsV2Input
 		listObjectsV2Output                *s3.ListObjectsV2Output
 		listObjectsV2OutputContentsElement s3types.Object
-		objectNameCutPrefix                string
+		objectKey                          string
+		objectKeyCutPrefix                 string
+		objectKeyCutPrefixSlice            []string
+		objectKeyCutPrefixSliceElement     string
 		ok                                 bool
+		parentInode                        *inodeStruct
 		s3Config                           aws.Config
 	)
 
@@ -207,41 +215,36 @@ func main() {
 	}
 	globals.logger.Printf("globals.config: %s", string(configAsJSON[:]))
 
-	globals.inodeTable = sortedmap.NewLLRBTree(sortedmap.CompareUint64, &globals)
+	globals.inodeTable = make([]*inodeStruct, 0)
 
-	inode = &inodeStruct{
+	childInode = &inodeStruct{
 		inodeNumber: rootDirInodeNumber,
 		linkCount:   2,
 		mode:        dirMode,
 		dirTable:    nil, // filled in below
+		objectKey:   "",  // ignored for .mode == dirMode
 		fileSize:    0,   // ignored for .mode == dirMode
 	}
 
-	inode.dirTable = sortedmap.NewLLRBTree(sortedmap.CompareString, inode)
+	childInode.dirTable = sortedmap.NewLLRBTree(sortedmap.CompareString, childInode)
 
-	ok, err = inode.dirTable.Put(dotDirTableEntryName, rootDirInodeNumber)
+	ok, err = childInode.dirTable.Put(dotDirTableEntryName, childInode.inodeNumber)
 	if err != nil {
-		globals.logger.Fatalf("inode.dirTable.Put(dotDirTableEntryName, rootDirInodeNumber) failed %v", err)
+		globals.logger.Fatalf("childInode.dirTable.Put(dotDirTableEntryName, childInode.inodeNumber) failed %v", err)
 	}
 	if !ok {
-		globals.logger.Fatalf("inode.dirTable.Put(dotDirTableEntryName, rootDirInodeNumber) returned !ok")
+		globals.logger.Fatalf("childInode.dirTable.Put(dotDirTableEntryName, childInode.inodeNumber) returned !ok")
 	}
 
-	ok, err = inode.dirTable.Put(dotDotDirTableEntryName, rootDirInodeNumber)
+	ok, err = childInode.dirTable.Put(dotDotDirTableEntryName, childInode.inodeNumber)
 	if err != nil {
-		globals.logger.Fatalf("inode.dirTable.Put(dotDotDirTableEntryName, rootDirInodeNumber) failed %v", err)
+		globals.logger.Fatalf("childInode.dirTable.Put(dotDotDirTableEntryName, childInode.inodeNumber) failed %v", err)
 	}
 	if !ok {
-		globals.logger.Fatalf("inode.dirTable.Put(dotDotDirTableEntryName, rootDirInodeNumber) returned !ok")
+		globals.logger.Fatalf("childInode.dirTable.Put(dotDotDirTableEntryName, childInode.inodeNumber) returned !ok")
 	}
 
-	ok, err = globals.inodeTable.Put(inode.inodeNumber, inode)
-	if err != nil {
-		globals.logger.Fatalf("globals.inodeTable.Put(inode.inodeNumber, inode) failed %v", err)
-	}
-	if !ok {
-		globals.logger.Fatalf("globals.inodeTable.Put(inode.inodeNumber, inode) returned !ok")
-	}
+	globals.inodeTable = append(globals.inodeTable, childInode)
 
 	s3Config, err = config.LoadDefaultConfig(
 		context.TODO(),
@@ -287,50 +290,107 @@ func main() {
 		}
 
 		for _, listObjectsV2OutputContentsElement = range listObjectsV2Output.Contents {
-			objectNameCutPrefix, found = strings.CutPrefix(*listObjectsV2OutputContentsElement.Key, globals.config.S3Prefix)
+			objectKey = *listObjectsV2OutputContentsElement.Key
+
+			objectKeyCutPrefix, found = strings.CutPrefix(objectKey, globals.config.S3Prefix)
 			if !found {
-				log.Fatalf("strings.CutPrefix(\"%s\", globals.args.S3Prefix) returned !found", *listObjectsV2OutputContentsElement.Key)
+				log.Fatalf("strings.CutPrefix(\"%s\", globals.args.S3Prefix) returned !found", objectKey)
 			}
 
-			globals.logger.Printf("UNDO: found objectNameCutPrefix: \"%s\"", objectNameCutPrefix)
+			objectKeyCutPrefixSlice = strings.Split(objectKeyCutPrefix, "/")
+
+			fmt.Printf("UNDO: found objectKey:                      \"%s\"\n", objectKey)
+			fmt.Printf("UNDO: found objectKeyCutPrefix:             \"%s\"\n", objectKeyCutPrefix)
+			fmt.Printf("UNDO: found objectKeyCutPrefixSlice:        %v\n", objectKeyCutPrefixSlice)
+
+			parentInode = globals.inodeTable[rootDirInodeNumber-1]
+
+			for _, objectKeyCutPrefixSliceElement = range objectKeyCutPrefixSlice[:len(objectKeyCutPrefixSlice)-1] {
+				fmt.Printf("UNDO: objectKeyCutPrefixSliceElement: \"%s\"\n", objectKeyCutPrefixSliceElement)
+				childInodeNumberAsValue, ok, err = parentInode.dirTable.GetByKey(objectKeyCutPrefixSliceElement)
+				if err != nil {
+					log.Fatalf("parentInode.dirTable.GetByKey(objectKeyCutPrefixSliceElement) failed: %v", err)
+				}
+
+				if ok {
+					fmt.Printf("UNDO \"%s\" pre-existing\n", objectKeyCutPrefixSliceElement)
+					childInodeNumber, ok = childInodeNumberAsValue.(uint64)
+					if !ok {
+						log.Fatalf("childInodeNumberAsValue.(uint64) returned !ok")
+					}
+
+					parentInode = globals.inodeTable[childInodeNumber-1]
+				} else {
+					fmt.Printf("UNDO \"%s\" missing... needs to be created\n", objectKeyCutPrefixSliceElement)
+					childInode = &inodeStruct{
+						inodeNumber: uint64(len(globals.inodeTable) + 1),
+						linkCount:   2,
+						mode:        dirMode,
+						dirTable:    nil, // filled in below
+						objectKey:   "",  // ignored for .mode == dirMode
+						fileSize:    0,   // ignored for .mode == dirMode
+					}
+
+					childInode.dirTable = sortedmap.NewLLRBTree(sortedmap.CompareString, childInode)
+
+					ok, err = childInode.dirTable.Put(dotDirTableEntryName, childInode.inodeNumber)
+					if err != nil {
+						globals.logger.Fatalf("childInode.dirTable.Put(dotDirTableEntryName, childInode.inodeNumber) failed %v", err)
+					}
+					if !ok {
+						globals.logger.Fatalf("childInode.dirTable.Put(dotDirTableEntryName, childInode.inodeNumber) returned !ok")
+					}
+
+					ok, err = childInode.dirTable.Put(dotDotDirTableEntryName, parentInode.inodeNumber)
+					if err != nil {
+						globals.logger.Fatalf("childInode.dirTable.Put(dotDotDirTableEntryName, parentInode.inodeNumber) failed %v", err)
+					}
+					if !ok {
+						globals.logger.Fatalf("childInode.dirTable.Put(dotDotDirTableEntryName, parentInode.inodeNumber) returned !ok")
+					}
+
+					parentInode.linkCount++
+
+					ok, err = parentInode.dirTable.Put(objectKeyCutPrefixSliceElement, childInode.inodeNumber)
+					if err != nil {
+						globals.logger.Fatalf("parentInode.dirTable.Put(objectKeyCutPrefixSliceElement, childInode.inodeNumber) failed %v", err)
+					}
+					if !ok {
+						globals.logger.Fatalf("parentInode.dirTable.Put(objectKeyCutPrefixSliceElement, childInode.inodeNumber) returned !ok")
+					}
+					fmt.Printf("UNDO: parentInode.dirTable.Put(\"%s\", 0x%08X) [dir]\n", objectKeyCutPrefixSliceElement, childInode.inodeNumber)
+
+					globals.inodeTable = append(globals.inodeTable, childInode)
+
+					parentInode = childInode
+				}
+			}
+
+			objectKeyCutPrefixSliceElement = objectKeyCutPrefixSlice[len(objectKeyCutPrefixSlice)-1]
+
+			childInode = &inodeStruct{
+				inodeNumber: uint64(len(globals.inodeTable) + 1),
+				linkCount:   1,
+				mode:        fileMode,
+				dirTable:    nil,       // ignored for .mode == dirMode
+				objectKey:   objectKey, //
+				fileSize:    -1,        // indicate we still need to fetch the object's size
+			}
+
+			ok, err = parentInode.dirTable.Put(objectKeyCutPrefixSliceElement, childInode.inodeNumber)
+			if err != nil {
+				globals.logger.Fatalf("parentInode.dirTable.Put(objectKeyCutPrefixSliceElement, childInode.inodeNumber) failed %v", err)
+			}
+			if !ok {
+				globals.logger.Fatalf("parentInode.dirTable.Put(objectKeyCutPrefixSliceElement, childInode.inodeNumber) returned !ok")
+			}
+			fmt.Printf("UNDO: parentInode.dirTable.Put(\"%s\", 0x%08X) [file]\n", objectKeyCutPrefixSliceElement, childInode.inodeNumber)
+
+			globals.inodeTable = append(globals.inodeTable, childInode)
 		}
 	}
-}
 
-func (dummy *globalsStruct) DumpKey(key sortedmap.Key) (keyAsString string, err error) {
-	var (
-		keyAsUint64 uint64
-		ok          bool
-	)
-
-	keyAsUint64, ok = key.(uint64)
-	if !ok {
-		err = fmt.Errorf("key.(uint64) returned !ok")
-		return
-	}
-
-	keyAsString = fmt.Sprintf("%08X", keyAsUint64)
-
-	err = nil
-	return
-}
-
-func (dummy *globalsStruct) DumpValue(value sortedmap.Value) (valueAsString string, err error) {
-	var (
-		ok                 bool
-		valueAsInodeStruct *inodeStruct
-	)
-
-	valueAsInodeStruct, ok = value.(*inodeStruct)
-	if !ok {
-		err = fmt.Errorf("value.(*inodeStruct) returned !ok")
-		return
-	}
-
-	valueAsString = fmt.Sprintf("{inodeNumber:%08X,linkCount=%d,mode=%04X}", valueAsInodeStruct.inodeNumber, valueAsInodeStruct.linkCount, valueAsInodeStruct.mode)
-
-	err = nil
-	return
+	fmt.Printf("UNDO - len(globals.inodeTable): %v\n", len(globals.inodeTable))
 }
 
 func (inode *inodeStruct) DumpKey(key sortedmap.Key) (keyAsString string, err error) {
