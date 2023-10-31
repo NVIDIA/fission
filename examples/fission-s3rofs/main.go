@@ -21,6 +21,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 
+	"github.com/NVIDIA/sortedmap"
+
 	"github.com/NVIDIA/fission"
 )
 
@@ -53,21 +55,13 @@ const (
 	attrValidSec  = uint64(10)
 	attrValidNSec = uint32(0)
 
-	accessROK = syscall.S_IROTH // surprisingly not defined as syscall.R_OK
-	accessWOK = syscall.S_IWOTH // surprisingly not defined as syscall.W_OK
-	accessXOK = syscall.S_IXOTH // surprisingly not defined as syscall.X_OK
-
-	accessMask       = syscall.S_IRWXO // used to mask Owner, Group, or Other RWX bits
-	accessOwnerShift = 6
-	accessGroupShift = 3
-	accessOtherShift = 0
-
 	dirMode  = uint32(syscall.S_IFDIR | syscall.S_IRUSR | syscall.S_IXUSR | syscall.S_IRGRP | syscall.S_IXGRP | syscall.S_IROTH | syscall.S_IXOTH)
 	fileMode = uint32(syscall.S_IFREG | syscall.S_IRUSR | syscall.S_IRGRP | syscall.S_IROTH)
 
-	authModeNoAuthNeeded  = uint8(0)
-	authModeTokenProvided = uint8(1)
-	authModeURLProvided   = uint8(2)
+	rootDirInodeNumber = uint64(1)
+
+	dotDirTableEntryName    = string(".")
+	dotDotDirTableEntryName = string("..")
 )
 
 type configStruct struct {
@@ -88,10 +82,19 @@ type configStruct struct {
 	CacheLineSize     uint64
 }
 
+type inodeStruct struct {
+	inodeNumber uint64
+	linkCount   uint64
+	mode        uint32             // & syscall.S_IFMT will be either syscall.S_IFDIR or syscall.S_IFREG
+	dirTable    sortedmap.LLRBTree // [only for syscall.S_IFDIR] key == string "name"; value == inodeNumber
+	fileSize    int64              // [only for syscall.S_IFREG] a value < 0 means not yet fetched
+}
+
 type globalsStruct struct {
-	config   *configStruct
-	logger   *log.Logger
-	s3Client *s3.Client
+	config     *configStruct
+	logger     *log.Logger
+	s3Client   *s3.Client
+	inodeTable sortedmap.LLRBTree // key == uint64(inodeNumber); value == *inodeStruct
 }
 
 var globals globalsStruct
@@ -102,10 +105,12 @@ func main() {
 		configFileContent                  []byte
 		err                                error
 		found                              bool
+		inode                              *inodeStruct
 		listObjectsV2Input                 *s3.ListObjectsV2Input
 		listObjectsV2Output                *s3.ListObjectsV2Output
 		listObjectsV2OutputContentsElement s3types.Object
 		objectNameCutPrefix                string
+		ok                                 bool
 		s3Config                           aws.Config
 	)
 
@@ -202,6 +207,42 @@ func main() {
 	}
 	globals.logger.Printf("globals.config: %s", string(configAsJSON[:]))
 
+	globals.inodeTable = sortedmap.NewLLRBTree(sortedmap.CompareUint64, &globals)
+
+	inode = &inodeStruct{
+		inodeNumber: rootDirInodeNumber,
+		linkCount:   2,
+		mode:        dirMode,
+		dirTable:    nil, // filled in below
+		fileSize:    0,   // ignored for .mode == dirMode
+	}
+
+	inode.dirTable = sortedmap.NewLLRBTree(sortedmap.CompareString, inode)
+
+	ok, err = inode.dirTable.Put(dotDirTableEntryName, rootDirInodeNumber)
+	if err != nil {
+		globals.logger.Fatalf("inode.dirTable.Put(dotDirTableEntryName, rootDirInodeNumber) failed %v", err)
+	}
+	if !ok {
+		globals.logger.Fatalf("inode.dirTable.Put(dotDirTableEntryName, rootDirInodeNumber) returned !ok")
+	}
+
+	ok, err = inode.dirTable.Put(dotDotDirTableEntryName, rootDirInodeNumber)
+	if err != nil {
+		globals.logger.Fatalf("inode.dirTable.Put(dotDotDirTableEntryName, rootDirInodeNumber) failed %v", err)
+	}
+	if !ok {
+		globals.logger.Fatalf("inode.dirTable.Put(dotDotDirTableEntryName, rootDirInodeNumber) returned !ok")
+	}
+
+	ok, err = globals.inodeTable.Put(inode.inodeNumber, inode)
+	if err != nil {
+		globals.logger.Fatalf("globals.inodeTable.Put(inode.inodeNumber, inode) failed %v", err)
+	}
+	if !ok {
+		globals.logger.Fatalf("globals.inodeTable.Put(inode.inodeNumber, inode) returned !ok")
+	}
+
 	s3Config, err = config.LoadDefaultConfig(
 		context.TODO(),
 		config.WithCredentialsProvider(credentials.StaticCredentialsProvider{
@@ -254,4 +295,73 @@ func main() {
 			globals.logger.Printf("UNDO: found objectNameCutPrefix: \"%s\"", objectNameCutPrefix)
 		}
 	}
+}
+
+func (dummy *globalsStruct) DumpKey(key sortedmap.Key) (keyAsString string, err error) {
+	var (
+		keyAsUint64 uint64
+		ok          bool
+	)
+
+	keyAsUint64, ok = key.(uint64)
+	if !ok {
+		err = fmt.Errorf("key.(uint64) returned !ok")
+		return
+	}
+
+	keyAsString = fmt.Sprintf("%08X", keyAsUint64)
+
+	err = nil
+	return
+}
+
+func (dummy *globalsStruct) DumpValue(value sortedmap.Value) (valueAsString string, err error) {
+	var (
+		ok                 bool
+		valueAsInodeStruct *inodeStruct
+	)
+
+	valueAsInodeStruct, ok = value.(*inodeStruct)
+	if !ok {
+		err = fmt.Errorf("value.(*inodeStruct) returned !ok")
+		return
+	}
+
+	valueAsString = fmt.Sprintf("{inodeNumber:%08X,linkCount=%d,mode=%04X}", valueAsInodeStruct.inodeNumber, valueAsInodeStruct.linkCount, valueAsInodeStruct.mode)
+
+	err = nil
+	return
+}
+
+func (inode *inodeStruct) DumpKey(key sortedmap.Key) (keyAsString string, err error) {
+	var (
+		ok bool
+	)
+
+	keyAsString, ok = key.(string)
+	if !ok {
+		err = fmt.Errorf("key.(string) returned !ok")
+		return
+	}
+
+	err = nil
+	return
+}
+
+func (inode *inodeStruct) DumpValue(value sortedmap.Value) (valueAsString string, err error) {
+	var (
+		ok            bool
+		valueAsUint64 uint64
+	)
+
+	valueAsUint64, ok = value.(uint64)
+	if !ok {
+		err = fmt.Errorf("value.(uint64) returned !ok")
+		return
+	}
+
+	valueAsString = fmt.Sprintf("%08X", valueAsUint64)
+
+	err = nil
+	return
 }
