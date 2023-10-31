@@ -4,13 +4,22 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"os"
+	"strings"
 	"syscall"
+	"time"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/aws/retry"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 
 	"github.com/NVIDIA/fission"
 )
@@ -81,6 +90,7 @@ type configStruct struct {
 
 type globalsStruct struct {
 	config   *configStruct
+	logger   *log.Logger
 	s3Client *s3.Client
 }
 
@@ -88,8 +98,15 @@ var globals globalsStruct
 
 func main() {
 	var (
-		configFileContent []byte
-		err               error
+		configAsJSON                       []byte
+		configFileContent                  []byte
+		err                                error
+		found                              bool
+		listObjectsV2Input                 *s3.ListObjectsV2Input
+		listObjectsV2Output                *s3.ListObjectsV2Output
+		listObjectsV2OutputContentsElement s3types.Object
+		objectNameCutPrefix                string
+		s3Config                           aws.Config
 	)
 
 	if len(os.Args) != 2 {
@@ -120,18 +137,18 @@ func main() {
 		os.Exit(0)
 	}
 
+	globals.logger = log.New(os.Stdout, "", log.Ldate|log.Ltime)
+
 	configFileContent, err = ioutil.ReadFile(os.Args[1])
 	if nil != err {
-		fmt.Printf("ioutil.ReadFile(\"%s\") failed: %v\n", os.Args[1], err)
-		os.Exit(1)
+		globals.logger.Fatalf("ioutil.ReadFile(\"%s\") failed: %v", os.Args[1], err)
 	}
 
 	globals.config = &configStruct{}
 
 	err = json.Unmarshal(configFileContent, globals.config)
 	if nil != err {
-		fmt.Printf("json.Unmarshal(configFileContent, config) failed: %v\n", err)
-		os.Exit(1)
+		globals.logger.Fatalf("json.Unmarshal(configFileContent, config) failed: %v", err)
 	}
 
 	if globals.config.S3AccessKeyMasked == "" {
@@ -163,22 +180,78 @@ func main() {
 	if globals.config.FileCacheLines != 0 {
 		err = os.MkdirAll(globals.config.CacheDirPath, 0777)
 		if err != nil {
-			fmt.Printf("os.MkdirAll(globals.config.CacheDirPath, 0777) [Case 1] failed: %v\n", err)
+			globals.logger.Fatalf("os.MkdirAll(globals.config.CacheDirPath, 0777) [Case 1] failed: %v", err)
 		}
 		err = os.RemoveAll(globals.config.CacheDirPath)
 		if err != nil {
-			fmt.Printf("os.RemoveAll(globals.config.CacheDirPath) failed: %v\n", err)
+			globals.logger.Fatalf("os.RemoveAll(globals.config.CacheDirPath) failed: %v", err)
 		}
 		err = os.MkdirAll(globals.config.CacheDirPath, 0777)
 		if err != nil {
-			fmt.Printf("os.MkdirAll(globals.config.CacheDirPath, 0777) [Case 2] failed: %v\n", err)
+			globals.logger.Fatalf("os.MkdirAll(globals.config.CacheDirPath, 0777) [Case 2] failed: %v", err)
 		}
 	}
 
 	if globals.config.CacheLineSize == 0 {
-		fmt.Printf("CacheLineSize must be > 0\n")
-		os.Exit(1)
+		globals.logger.Fatalf("CacheLineSize must be > 0")
 	}
 
-	fmt.Printf("UNDO: lobals.config: %#v\n", globals.config)
+	configAsJSON, err = json.Marshal(globals.config)
+	if err != nil {
+		globals.logger.Printf("json.Marshal(globals.config) failed: %v", err)
+	}
+	globals.logger.Printf("globals.config: %s", string(configAsJSON[:]))
+
+	s3Config, err = config.LoadDefaultConfig(
+		context.TODO(),
+		config.WithCredentialsProvider(credentials.StaticCredentialsProvider{
+			Value: aws.Credentials{
+				AccessKeyID:     globals.config.s3AccessKey,
+				SecretAccessKey: globals.config.s3SecretKey,
+			},
+		}),
+		config.WithEndpointResolverWithOptions(aws.EndpointResolverWithOptionsFunc(
+			func(service, region string, options ...interface{}) (aws.Endpoint, error) {
+				return aws.Endpoint{
+					URL:               globals.config.S3Endpoint,
+					SigningRegion:     globals.config.S3Region,
+					HostnameImmutable: true,
+				}, nil
+			})),
+		config.WithRegion(globals.config.S3Region),
+		config.WithRetryer(func() aws.Retryer {
+			return retry.AddWithMaxBackoffDelay(retry.AddWithMaxAttempts(retry.NewStandard(), int(globals.config.S3Attempts)), time.Duration(int(globals.config.S3Backoff))*time.Second)
+		}))
+	if err != nil {
+		log.Fatalf("config.LoadDefaultConfig() failed: %v", err)
+	}
+
+	globals.s3Client = s3.NewFromConfig(s3Config)
+
+	listObjectsV2Input = &s3.ListObjectsV2Input{
+		Bucket: aws.String(globals.config.S3Bucket),
+		Prefix: aws.String(globals.config.S3Prefix),
+	}
+	listObjectsV2Output = &s3.ListObjectsV2Output{
+		IsTruncated:           true,
+		NextContinuationToken: nil,
+	}
+
+	for listObjectsV2Output.IsTruncated {
+		listObjectsV2Input.ContinuationToken = listObjectsV2Output.NextContinuationToken
+
+		listObjectsV2Output, err = globals.s3Client.ListObjectsV2(context.TODO(), listObjectsV2Input)
+		if err != nil {
+			log.Fatalf("globals.s3Client.ListObjectsV2() failed: %v", err)
+		}
+
+		for _, listObjectsV2OutputContentsElement = range listObjectsV2Output.Contents {
+			objectNameCutPrefix, found = strings.CutPrefix(*listObjectsV2OutputContentsElement.Key, globals.config.S3Prefix)
+			if !found {
+				log.Fatalf("strings.CutPrefix(\"%s\", globals.args.S3Prefix) returned !found", *listObjectsV2OutputContentsElement.Key)
+			}
+
+			globals.logger.Printf("UNDO: found objectNameCutPrefix: \"%s\"", objectNameCutPrefix)
+		}
+	}
 }
