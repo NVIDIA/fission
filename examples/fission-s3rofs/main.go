@@ -27,6 +27,8 @@ import (
 )
 
 const (
+	verboseMode = false
+
 	fuseSubtype   = "fission-swiftfs"
 	httpUserAgent = "fission-swiftfs"
 
@@ -102,14 +104,13 @@ var globals globalsStruct
 
 func main() {
 	var (
-		childInode              *inodeStruct
-		childInodeNumber        uint64
-		childInodeNumberAsValue sortedmap.Value
-		configAsJSON            []byte
-		configFileContent       []byte
-		err                     error
-		found                   bool
-		// inodeNumber                        uint64
+		childInode                         *inodeStruct
+		childInodeNumber                   uint64
+		childInodeNumberAsValue            sortedmap.Value
+		configAsJSON                       []byte
+		configFileContent                  []byte
+		err                                error
+		found                              bool
 		listObjectsV2Input                 *s3.ListObjectsV2Input
 		listObjectsV2Output                *s3.ListObjectsV2Output
 		listObjectsV2OutputContentsElement s3types.Object
@@ -209,11 +210,14 @@ func main() {
 		globals.logger.Fatalf("CacheLineSize must be > 0")
 	}
 
-	configAsJSON, err = json.Marshal(globals.config)
-	if err != nil {
-		globals.logger.Printf("json.Marshal(globals.config) failed: %v", err)
+	if verboseMode {
+		configAsJSON, err = json.Marshal(globals.config)
+		if err != nil {
+			globals.logger.Printf("json.Marshal(globals.config) failed: %v", err)
+		}
+
+		globals.logger.Printf("globals.config: %s", string(configAsJSON[:]))
 	}
-	globals.logger.Printf("globals.config: %s", string(configAsJSON[:]))
 
 	globals.inodeTable = make([]*inodeStruct, 0)
 
@@ -299,21 +303,15 @@ func main() {
 
 			objectKeyCutPrefixSlice = strings.Split(objectKeyCutPrefix, "/")
 
-			fmt.Printf("UNDO: found objectKey:                      \"%s\"\n", objectKey)
-			fmt.Printf("UNDO: found objectKeyCutPrefix:             \"%s\"\n", objectKeyCutPrefix)
-			fmt.Printf("UNDO: found objectKeyCutPrefixSlice:        %v\n", objectKeyCutPrefixSlice)
-
 			parentInode = globals.inodeTable[rootDirInodeNumber-1]
 
 			for _, objectKeyCutPrefixSliceElement = range objectKeyCutPrefixSlice[:len(objectKeyCutPrefixSlice)-1] {
-				fmt.Printf("UNDO: objectKeyCutPrefixSliceElement: \"%s\"\n", objectKeyCutPrefixSliceElement)
 				childInodeNumberAsValue, ok, err = parentInode.dirTable.GetByKey(objectKeyCutPrefixSliceElement)
 				if err != nil {
 					log.Fatalf("parentInode.dirTable.GetByKey(objectKeyCutPrefixSliceElement) failed: %v", err)
 				}
 
 				if ok {
-					fmt.Printf("UNDO \"%s\" pre-existing\n", objectKeyCutPrefixSliceElement)
 					childInodeNumber, ok = childInodeNumberAsValue.(uint64)
 					if !ok {
 						log.Fatalf("childInodeNumberAsValue.(uint64) returned !ok")
@@ -321,7 +319,6 @@ func main() {
 
 					parentInode = globals.inodeTable[childInodeNumber-1]
 				} else {
-					fmt.Printf("UNDO \"%s\" missing... needs to be created\n", objectKeyCutPrefixSliceElement)
 					childInode = &inodeStruct{
 						inodeNumber: uint64(len(globals.inodeTable) + 1),
 						linkCount:   2,
@@ -358,7 +355,6 @@ func main() {
 					if !ok {
 						globals.logger.Fatalf("parentInode.dirTable.Put(objectKeyCutPrefixSliceElement, childInode.inodeNumber) returned !ok")
 					}
-					fmt.Printf("UNDO: parentInode.dirTable.Put(\"%s\", 0x%08X) [dir]\n", objectKeyCutPrefixSliceElement, childInode.inodeNumber)
 
 					globals.inodeTable = append(globals.inodeTable, childInode)
 
@@ -384,13 +380,12 @@ func main() {
 			if !ok {
 				globals.logger.Fatalf("parentInode.dirTable.Put(objectKeyCutPrefixSliceElement, childInode.inodeNumber) returned !ok")
 			}
-			fmt.Printf("UNDO: parentInode.dirTable.Put(\"%s\", 0x%08X) [file]\n", objectKeyCutPrefixSliceElement, childInode.inodeNumber)
 
 			globals.inodeTable = append(globals.inodeTable, childInode)
 		}
 	}
 
-	fmt.Printf("UNDO - len(globals.inodeTable): %v\n", len(globals.inodeTable))
+	// TODO: Now need to launch FUSE Mount of the file system
 }
 
 func (inode *inodeStruct) DumpKey(key sortedmap.Key) (keyAsString string, err error) {
