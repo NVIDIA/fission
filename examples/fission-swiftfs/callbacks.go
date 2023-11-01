@@ -69,7 +69,7 @@ RetryAfterReAuth:
 
 	authToken = fetchAuthToken()
 	if "" != authToken {
-		httpRequest.Header["X-Auth-Token"DoMount] = []string{authToken}
+		httpRequest.Header["X-Auth-Token"] = []string{authToken}
 	}
 
 	httpResponse, err = globals.httpClient.Do(httpRequest)

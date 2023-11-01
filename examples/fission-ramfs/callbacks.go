@@ -7,9 +7,8 @@ import (
 	"os"
 	"syscall"
 
-	"github.com/NVIDIA/sortedmap"
-
 	"github.com/NVIDIA/fission"
+	"github.com/NVIDIA/sortedmap"
 )
 
 func (dummy *globalsStruct) DoLookup(inHeader *fission.InHeader, lookupIn *fission.LookupIn) (lookupOut *fission.LookupOut, errno syscall.Errno) {

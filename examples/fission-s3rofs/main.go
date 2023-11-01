@@ -10,6 +10,8 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"os/signal"
+	"path"
 	"strings"
 	"syscall"
 	"time"
@@ -21,16 +23,17 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 
-	"github.com/NVIDIA/sortedmap"
+	"golang.org/x/sys/unix"
 
 	"github.com/NVIDIA/fission"
+	"github.com/NVIDIA/sortedmap"
 )
 
 const (
 	verboseMode = false
 
-	fuseSubtype   = "fission-swiftfs"
-	httpUserAgent = "fission-swiftfs"
+	fuseSubtype   = "fission-s3r0fs"
+	httpUserAgent = "fission-s3rofs"
 
 	initOutFlagsReadOnly = uint32(0) |
 		fission.InitFlagsAsyncRead |
@@ -49,13 +52,29 @@ const (
 	maxRead  = uint32(maxPages * 4096) //                     1MiB... the max read          size in Linux FUSE at this time
 	maxWrite = uint32(maxPages * 4096) //                     1MiB... the max         write size in Linux FUSE at this time
 
+	attrUID = uint32(0)
+	attrGID = uint32(0)
+
+	attrRDev = uint32(0)
+
 	attrBlkSize = uint32(512)
+
+	entryGeneration = uint64(0)
 
 	entryValidSec  = uint64(10)
 	entryValidNSec = uint32(0)
 
 	attrValidSec  = uint64(10)
 	attrValidNSec = uint32(0)
+
+	accessROK = syscall.S_IROTH // surprisingly not defined as syscall.R_OK
+	accessWOK = syscall.S_IWOTH // surprisingly not defined as syscall.W_OK
+	accessXOK = syscall.S_IXOTH // surprisingly not defined as syscall.X_OK
+
+	accessMask       = syscall.S_IRWXO // used to mask Owner, Group, or Other RWX bits
+	accessOwnerShift = 6
+	accessGroupShift = 3
+	accessOtherShift = 0
 
 	dirMode  = uint32(syscall.S_IFDIR | syscall.S_IRUSR | syscall.S_IXUSR | syscall.S_IRGRP | syscall.S_IXGRP | syscall.S_IROTH | syscall.S_IXOTH)
 	fileMode = uint32(syscall.S_IFREG | syscall.S_IRUSR | syscall.S_IRGRP | syscall.S_IROTH)
@@ -99,6 +118,9 @@ type globalsStruct struct {
 	logger     *log.Logger
 	s3Client   *s3.Client
 	inodeTable []*inodeStruct // index == uint64(inodeNumber - 1)
+	blocks     uint64
+	errChan    chan error
+	volume     fission.Volume
 }
 
 var globals globalsStruct
@@ -111,6 +133,7 @@ func main() {
 		configAsJSON                       []byte
 		configFileContent                  []byte
 		err                                error
+		fileInodeBlocks                    uint64
 		found                              bool
 		listObjectsV2Input                 *s3.ListObjectsV2Input
 		listObjectsV2Output                *s3.ListObjectsV2Output
@@ -122,6 +145,7 @@ func main() {
 		ok                                 bool
 		parentInode                        *inodeStruct
 		s3Config                           aws.Config
+		signalChan                         chan os.Signal
 		timeAtLaunch                       time.Time = time.Now()
 	)
 
@@ -222,6 +246,8 @@ func main() {
 	}
 
 	globals.inodeTable = make([]*inodeStruct, 0)
+
+	globals.blocks = 0
 
 	childInode = &inodeStruct{
 		inodeNumber:  rootDirInodeNumber,
@@ -371,6 +397,11 @@ func main() {
 				objectKey:    objectKey,
 			}
 
+			fileInodeBlocks = childInode.size + (uint64(attrBlkSize) - 1)
+			fileInodeBlocks /= uint64(attrBlkSize)
+
+			globals.blocks += fileInodeBlocks
+
 			ok, err = parentInode.dirTable.Put(objectKeyCutPrefixSliceElement, childInode.inodeNumber)
 			if err != nil {
 				globals.logger.Fatalf("parentInode.dirTable.Put(objectKeyCutPrefixSliceElement, childInode.inodeNumber) failed %v", err)
@@ -383,7 +414,25 @@ func main() {
 		}
 	}
 
-	// TODO: Now need to launch FUSE Mount of the file system
+	globals.errChan = make(chan error, 1)
+
+	globals.volume = fission.NewVolume(path.Base(globals.config.MountPoint), globals.config.MountPoint, fuseSubtype, maxRead, maxWrite, false, false, &globals, globals.logger, globals.errChan)
+
+	signalChan = make(chan os.Signal, 1)
+	signal.Notify(signalChan, unix.SIGINT, unix.SIGTERM, unix.SIGHUP)
+
+	select {
+	case _ = <-signalChan:
+		// Normal termination due to one of the above registered signals
+	case err = <-globals.errChan:
+		// Unexpected exit of /dev/fuse read loop since it's before we call DoUnmount()
+		globals.logger.Printf("unexpected exit of /dev/fuse read loop: %v", err)
+	}
+
+	err = globals.volume.DoUnmount()
+	if nil != err {
+		globals.logger.Fatalf("fission.DoUnmount() failed: %v", err)
+	}
 }
 
 func (inode *inodeStruct) DumpKey(key sortedmap.Key) (keyAsString string, err error) {

@@ -18,10 +18,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/NVIDIA/sortedmap"
 	"golang.org/x/sys/unix"
 
 	"github.com/NVIDIA/fission"
+	"github.com/NVIDIA/sortedmap"
 )
 
 const (

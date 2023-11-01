@@ -15,9 +15,8 @@ import (
 
 	"golang.org/x/sys/unix"
 
-	"github.com/NVIDIA/sortedmap"
-
 	"github.com/NVIDIA/fission"
+	"github.com/NVIDIA/sortedmap"
 )
 
 const (
