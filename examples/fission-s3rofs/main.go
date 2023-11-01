@@ -418,6 +418,11 @@ func main() {
 
 	globals.volume = fission.NewVolume(path.Base(globals.config.MountPoint), globals.config.MountPoint, fuseSubtype, maxRead, maxWrite, false, false, &globals, globals.logger, globals.errChan)
 
+	err = globals.volume.DoMount()
+	if err != nil {
+		globals.logger.Fatalf("globals.volume.DoMount() failed: %v", err)
+	}
+
 	signalChan = make(chan os.Signal, 1)
 	signal.Notify(signalChan, unix.SIGINT, unix.SIGTERM, unix.SIGHUP)
 

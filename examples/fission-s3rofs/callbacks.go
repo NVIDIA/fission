@@ -53,7 +53,7 @@ func populateAttr(attr *fission.Attr, inode *inodeStruct) {
 }
 
 func fetchInode(inodeNumber uint64) (inode *inodeStruct) {
-	if (inodeNumber == 0) || (inodeNumber >= uint64(len(globals.inodeTable))) {
+	if (inodeNumber == 0) || (inodeNumber > uint64(len(globals.inodeTable))) {
 		inode = nil
 	} else {
 		inode = globals.inodeTable[inodeNumber-1]
