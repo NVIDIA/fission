@@ -85,12 +85,13 @@ type configStruct struct {
 }
 
 type inodeStruct struct {
-	inodeNumber uint64
-	linkCount   uint64
-	mode        uint32             // & syscall.S_IFMT will be either syscall.S_IFDIR or syscall.S_IFREG
-	dirTable    sortedmap.LLRBTree // [only for syscall.S_IFDIR] key == string "basename"; value == inodeNumber
-	objectKey   string             // [only for syscall.S_IFREG] S3
-	fileSize    int64              // [only for syscall.S_IFREG] a value < 0 means not yet fetched
+	inodeNumber  uint64             //
+	size         uint64             // [only for syscall.S_IFREG] Attr.Size (Attr.Blocks = round_up(size/attrBlkSize))
+	lastModified time.Time          // converted to Attr.{A|M|C}Time{Sec|NSec}
+	mode         uint32             // & syscall.S_IFMT will be either syscall.S_IFDIR or syscall.S_IFREG
+	linkCount    uint64             //
+	dirTable     sortedmap.LLRBTree // [only for syscall.S_IFDIR] key == string "basename"; value == inodeNumber
+	objectKey    string             // [only for syscall.S_IFREG] S3 Key (includes Prefix)
 }
 
 type globalsStruct struct {
@@ -121,6 +122,7 @@ func main() {
 		ok                                 bool
 		parentInode                        *inodeStruct
 		s3Config                           aws.Config
+		timeAtLaunch                       time.Time = time.Now()
 	)
 
 	if len(os.Args) != 2 {
@@ -222,12 +224,10 @@ func main() {
 	globals.inodeTable = make([]*inodeStruct, 0)
 
 	childInode = &inodeStruct{
-		inodeNumber: rootDirInodeNumber,
-		linkCount:   2,
-		mode:        dirMode,
-		dirTable:    nil, // filled in below
-		objectKey:   "",  // ignored for .mode == dirMode
-		fileSize:    0,   // ignored for .mode == dirMode
+		inodeNumber:  rootDirInodeNumber,
+		lastModified: timeAtLaunch,
+		mode:         dirMode,
+		linkCount:    2,
 	}
 
 	childInode.dirTable = sortedmap.NewLLRBTree(sortedmap.CompareString, childInode)
@@ -320,12 +320,10 @@ func main() {
 					parentInode = globals.inodeTable[childInodeNumber-1]
 				} else {
 					childInode = &inodeStruct{
-						inodeNumber: uint64(len(globals.inodeTable) + 1),
-						linkCount:   2,
-						mode:        dirMode,
-						dirTable:    nil, // filled in below
-						objectKey:   "",  // ignored for .mode == dirMode
-						fileSize:    0,   // ignored for .mode == dirMode
+						inodeNumber:  uint64(len(globals.inodeTable) + 1),
+						lastModified: timeAtLaunch,
+						mode:         dirMode,
+						linkCount:    2,
 					}
 
 					childInode.dirTable = sortedmap.NewLLRBTree(sortedmap.CompareString, childInode)
@@ -365,12 +363,12 @@ func main() {
 			objectKeyCutPrefixSliceElement = objectKeyCutPrefixSlice[len(objectKeyCutPrefixSlice)-1]
 
 			childInode = &inodeStruct{
-				inodeNumber: uint64(len(globals.inodeTable) + 1),
-				linkCount:   1,
-				mode:        fileMode,
-				dirTable:    nil,       // ignored for .mode == dirMode
-				objectKey:   objectKey, //
-				fileSize:    -1,        // indicate we still need to fetch the object's size
+				inodeNumber:  uint64(len(globals.inodeTable) + 1),
+				size:         uint64(listObjectsV2OutputContentsElement.Size),
+				lastModified: *listObjectsV2OutputContentsElement.LastModified,
+				mode:         fileMode,
+				linkCount:    1,
+				objectKey:    objectKey,
 			}
 
 			ok, err = parentInode.dirTable.Put(objectKeyCutPrefixSliceElement, childInode.inodeNumber)
