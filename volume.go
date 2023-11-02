@@ -37,14 +37,28 @@ type volumeStruct struct {
 }
 
 const (
-	recvmsgFlags   int = 0
-	recvmsgOOBSize     = 32
-	recvmsgPSize       = 4
+	recvmsgFlags   = int(0)
+	recvmsgOOBSize = 32
+	recvmsgPSize   = 4
 
 	devLinuxFusePath = "/dev/fuse"
+
+	devFuseFDReadSizeMin = 2 * 4096
 )
 
 func newVolume(volumeName string, mountpointDirPath string, fuseSubtype string, maxRead uint32, maxWrite uint32, defaultPermissions bool, allowOther bool, callbacks Callbacks, logger *log.Logger, errChan chan error) (volume *volumeStruct) {
+	var (
+		devFuseFDReadSize uint32
+	)
+
+	// Note: The following assumes maxWrite is either zero (indicating a ReadOnly Volume)
+	//       or sufficiently large to make the WriteIn case the largest message possible
+	//
+	devFuseFDReadSize = InHeaderSize + WriteInFixedPortionSize + maxWrite
+	if devFuseFDReadSize < devFuseFDReadSizeMin {
+		devFuseFDReadSize = devFuseFDReadSizeMin
+	}
+
 	volume = &volumeStruct{
 		volumeName:         volumeName,
 		mountpointDirPath:  mountpointDirPath,
@@ -56,7 +70,7 @@ func newVolume(volumeName string, mountpointDirPath string, fuseSubtype string, 
 		callbacks:          callbacks,
 		logger:             logger,
 		errChan:            errChan,
-		devFuseFDReadSize:  InHeaderSize + WriteInFixedPortionSize + maxWrite,
+		devFuseFDReadSize:  devFuseFDReadSize,
 	}
 
 	volume.devFuseFDReadPool = sync.Pool{
@@ -152,6 +166,12 @@ func (volume *volumeStruct) DoMount() (err error) {
 		"," + gidOption +
 		"," + fsnameOption +
 		"," + maxReadOption
+
+	if volume.maxWrite == 0 {
+		mountOptions += ",ro"
+	} else {
+		mountOptions += ",rw"
+	}
 
 	if volume.defaultPermissions {
 		mountOptions += ",default_permissions"

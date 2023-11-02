@@ -43,7 +43,7 @@ const (
 
 	maxPages = 256                     // * 4KiB page size == 1MiB... the max read or write size in Linux FUSE at this time
 	maxRead  = uint32(maxPages * 4096) //                     1MiB... the max read          size in Linux FUSE at this time
-	maxWrite = uint32(maxPages * 4096) //                     1MiB... the max         write size in Linux FUSE at this time
+	maxWrite = 0                       // indicates the volume is to be mounted ReadOnly
 
 	attrBlkSize = uint32(512)
 

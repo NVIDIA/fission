@@ -4,6 +4,7 @@
 package main
 
 import (
+	"container/list"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -13,6 +14,7 @@ import (
 	"os/signal"
 	"path"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -32,8 +34,9 @@ import (
 const (
 	verboseMode = false
 
-	fuseSubtype   = "fission-s3r0fs"
-	httpUserAgent = "fission-s3rofs"
+	fileCacheDirPattern = "fission-s3rofs_cache"
+
+	fuseSubtype = "fission-s3rofs"
 
 	initOutFlagsReadOnly = uint32(0) |
 		fission.InitFlagsAsyncRead |
@@ -50,7 +53,7 @@ const (
 
 	maxPages = 256                     // * 4KiB page size == 1MiB... the max read or write size in Linux FUSE at this time
 	maxRead  = uint32(maxPages * 4096) //                     1MiB... the max read          size in Linux FUSE at this time
-	maxWrite = uint32(maxPages * 4096) //                     1MiB... the max         write size in Linux FUSE at this time
+	maxWrite = 0                       // indicates the volume is to be mounted ReadOnly
 
 	attrUID = uint32(0)
 	attrGID = uint32(0)
@@ -97,9 +100,8 @@ type configStruct struct {
 	S3Backoff         uint64
 	S3Bucket          string
 	S3Prefix          string
-	CacheDirPath      string
 	FileCacheLines    uint64
-	NumCacheLines     uint64
+	RAMCacheLines     uint64
 	CacheLineSize     uint64
 }
 
@@ -113,14 +115,37 @@ type inodeStruct struct {
 	objectKey    string             // [only for syscall.S_IFREG] S3 Key (includes Prefix)
 }
 
+type cacheLineTagStruct struct {
+	inodeNumber uint64 // ...of fileInode
+	lineNumber  uint64 // starting offset within fileInode's contents == .lineNumber * globals.config.CacheLineSize
+}
+
+type fileCacheLineStruct struct {
+	listElement *list.Element
+	tag         cacheLineTagStruct
+	// content stored in file at fmt.Sprintf("%s/%08X_%08X", globals.fileCacheDir, tag.inodeNumber, tag.lineNumber)
+}
+
+type ramCacheLineStruct struct {
+	listElement *list.Element
+	tag         cacheLineTagStruct
+	content     []byte // len() <= globals.config.CacheLineSize
+}
+
 type globalsStruct struct {
-	config     *configStruct
-	logger     *log.Logger
-	s3Client   *s3.Client
-	inodeTable []*inodeStruct // index == uint64(inodeNumber - 1)
-	blocks     uint64
-	errChan    chan error
-	volume     fission.Volume
+	sync.Mutex   // protects {file|ram}Cache{LRU|Map}
+	config       *configStruct
+	logger       *log.Logger
+	s3Client     *s3.Client
+	inodeTable   []*inodeStruct // index == uint64(inodeNumber - 1)
+	blocks       uint64
+	fileCacheDir string
+	fileCacheLRU *list.List                                  // fileCacheLineStruct.listElement linked LRU
+	fileCacheMap map[cacheLineTagStruct]*fileCacheLineStruct // key == fileCacheLineStruct.tag; value == *fileCacheLineStruct
+	ramCacheLRU  *list.List                                  // ramCacheLineStruct.listElement linked LRU
+	ramCacheMap  map[cacheLineTagStruct]*ramCacheLineStruct  // key == ramCacheLineStruct.tag; value == *ramCacheLineStruct
+	errChan      chan error
+	volume       fission.Volume
 }
 
 var globals globalsStruct
@@ -167,12 +192,14 @@ func main() {
 		fmt.Printf("                           // defaults to 60\n")
 		fmt.Printf("      \"S3Bucket\"       : \"<S3 Bucket Name>\",\n")
 		fmt.Printf("      \"S3Prefix\"       : \"<S3 Object Prefix>\",\n")
-		fmt.Printf("      \"CacheDirPath\"   : \"<path to dir for non-RAM cache lines>\",\n")
-		fmt.Printf("                           // if FileCacheLines == 0, ignored\n")
-		fmt.Printf("                           // if FileCacheLines != 0, emptied at launch\n")
 		fmt.Printf("      \"FileCacheLines\" : <number of cache lines in CacheDirPath>,\n")
-		fmt.Printf("      \"RAMCacheLines\"  : <number of cache lines in RAM>,\n")
-		fmt.Printf("      \"CacheLineSize\"  : <(max) size of each cache line>\n")
+		fmt.Printf("                           // if == 0, file caching disabled\n")
+		fmt.Printf("                           // if >  0, file cache lines overflowing RAM\n")
+		fmt.Printf("                           //          stored in files in a TempDir\n")
+		fmt.Printf("      \"RAMCacheLines\"  : <number of cache lines in RAM> (must be > 0),\n")
+		fmt.Printf("                           // must be > 0\n")
+		fmt.Printf("      \"CacheLineSize\"  : <(max) size of each cache line> (must be > 0)\n")
+		fmt.Printf("                           // must be > 0\n")
 		fmt.Printf("    }\n")
 		os.Exit(0)
 	}
@@ -217,19 +244,8 @@ func main() {
 		globals.config.S3Backoff = 60
 	}
 
-	if globals.config.FileCacheLines != 0 {
-		err = os.MkdirAll(globals.config.CacheDirPath, 0777)
-		if err != nil {
-			globals.logger.Fatalf("os.MkdirAll(globals.config.CacheDirPath, 0777) [Case 1] failed: %v", err)
-		}
-		err = os.RemoveAll(globals.config.CacheDirPath)
-		if err != nil {
-			globals.logger.Fatalf("os.RemoveAll(globals.config.CacheDirPath) failed: %v", err)
-		}
-		err = os.MkdirAll(globals.config.CacheDirPath, 0777)
-		if err != nil {
-			globals.logger.Fatalf("os.MkdirAll(globals.config.CacheDirPath, 0777) [Case 2] failed: %v", err)
-		}
+	if globals.config.RAMCacheLines == 0 {
+		globals.logger.Fatalf("RAMCacheLines must be > 0")
 	}
 
 	if globals.config.CacheLineSize == 0 {
@@ -414,6 +430,24 @@ func main() {
 		}
 	}
 
+	if globals.config.FileCacheLines > 0 {
+		globals.fileCacheDir, err = os.MkdirTemp("", fileCacheDirPattern)
+		if err != nil {
+			globals.logger.Fatalf("os.MkdirTemp(\"\", fileCacheDirPattern) failed: %v", err)
+		}
+
+		globals.fileCacheLRU = list.New()
+		globals.fileCacheMap = make(map[cacheLineTagStruct]*fileCacheLineStruct)
+	} else {
+		globals.fileCacheDir = ""
+
+		globals.fileCacheLRU = nil
+		globals.fileCacheMap = nil
+	}
+
+	globals.ramCacheLRU = list.New()
+	globals.ramCacheMap = make(map[cacheLineTagStruct]*ramCacheLineStruct)
+
 	globals.errChan = make(chan error, 1)
 
 	globals.volume = fission.NewVolume(path.Base(globals.config.MountPoint), globals.config.MountPoint, fuseSubtype, maxRead, maxWrite, false, false, &globals, globals.logger, globals.errChan)
@@ -437,6 +471,13 @@ func main() {
 	err = globals.volume.DoUnmount()
 	if nil != err {
 		globals.logger.Fatalf("fission.DoUnmount() failed: %v", err)
+	}
+
+	if globals.fileCacheDir != "" {
+		err = os.RemoveAll(globals.fileCacheDir)
+		if err != nil {
+			globals.logger.Fatalf("os.RemoveAll(globals.fileCacheDir) failed: %v", err)
+		}
 	}
 }
 

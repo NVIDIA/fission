@@ -4,6 +4,7 @@
 package main
 
 import (
+	"fmt"
 	"math"
 	"syscall"
 	"time"
@@ -213,6 +214,58 @@ func (dummy *globalsStruct) DoOpen(inHeader *fission.InHeader, openIn *fission.O
 }
 
 func (dummy *globalsStruct) DoRead(inHeader *fission.InHeader, readIn *fission.ReadIn) (readOut *fission.ReadOut, errno syscall.Errno) {
+	var (
+		cacheLineTag      cacheLineTagStruct
+		fileCacheLine     *fileCacheLineStruct
+		fileInode         *inodeStruct
+		fileOffsetCurrent uint64
+		fileOffsetLimit   uint64
+		ok                bool
+		ramCacheLine      *ramCacheLineStruct
+	)
+
+	fileInode = fetchInode(inHeader.NodeID)
+	if fileInode == nil {
+		errno = syscall.ENOENT
+		return
+	}
+
+	if (fileInode.mode & syscall.S_IFMT) != syscall.S_IFREG {
+		errno = syscall.EINVAL
+		return
+	}
+
+	fileOffsetCurrent = readIn.Offset
+	if fileOffsetCurrent > fileInode.size {
+		fileOffsetCurrent = fileInode.size
+	}
+
+	fileOffsetLimit = fileOffsetCurrent + uint64(readIn.Size)
+	if (fileOffsetLimit > fileInode.size) || (fileOffsetLimit < fileOffsetCurrent) {
+		fileOffsetLimit = fileInode.size
+	}
+
+	readOut = &fission.ReadOut{
+		Data: make([]byte, 0, fileOffsetLimit-fileOffsetCurrent),
+	}
+
+	for fileOffsetCurrent < fileOffsetLimit {
+		cacheLineTag.inodeNumber = fileInode.inodeNumber
+		cacheLineTag.lineNumber = fileOffsetCurrent / globals.config.CacheLineSize
+
+		ramCacheLine, ok = globals.ramCacheMap[cacheLineTag]
+		if !ok {
+			fileCacheLine, ok = globals.fileCacheMap[cacheLineTag]
+		}
+		fmt.Printf("UNDO ok: %v\n", ok)
+		fmt.Printf("UNDO ramCacheLine: %v\n", ramCacheLine)
+		fmt.Printf("UNDO fileCacheLine: %v\n", fileCacheLine)
+
+		break // UNDO
+	}
+
+	errno = 0
+	return
 	/*
 		var (
 			authToken                  string
@@ -379,8 +432,6 @@ func (dummy *globalsStruct) DoRead(inHeader *fission.InHeader, readIn *fission.R
 			fileCurrentOffset += cacheLineBufLimitOffset - cacheLineBufStartOffset
 		}
 	*/
-	errno = syscall.ENOSYS
-	return
 }
 
 func (dummy *globalsStruct) DoWrite(inHeader *fission.InHeader, writeIn *fission.WriteIn) (writeOut *fission.WriteOut, errno syscall.Errno) {
@@ -409,6 +460,21 @@ func (dummy *globalsStruct) DoStatFS(inHeader *fission.InHeader) (statFSOut *fis
 }
 
 func (dummy *globalsStruct) DoRelease(inHeader *fission.InHeader, releaseIn *fission.ReleaseIn) (errno syscall.Errno) {
+	var (
+		fileInode *inodeStruct
+	)
+
+	fileInode = fetchInode(inHeader.NodeID)
+	if fileInode == nil {
+		errno = syscall.ENOENT
+		return
+	}
+
+	if (fileInode.mode & syscall.S_IFMT) != syscall.S_IFREG {
+		errno = syscall.EINVAL
+		return
+	}
+
 	errno = 0
 	return
 }
