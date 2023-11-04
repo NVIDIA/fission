@@ -5,10 +5,16 @@ package main
 
 import (
 	"container/list"
+	"context"
 	"fmt"
+	"io"
 	"math"
+	"os"
 	"syscall"
 	"time"
+
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 
 	"github.com/NVIDIA/fission"
 	"github.com/NVIDIA/sortedmap"
@@ -214,9 +220,54 @@ func (dummy *globalsStruct) DoOpen(inHeader *fission.InHeader, openIn *fission.O
 	return
 }
 
+/*
+	cacheLineTag.inodeNumber = fileInode.inodeNumber
+	cacheLineTag.lineNumber = fileOffsetCurrent / globals.config.CacheLineSize
+*/
+
+func (fileInode *inodeStruct) fetchCacheLine(lineNumber uint64) (objectCacheLine []byte, err error) {
+	var (
+		getObjectInput   *s3.GetObjectInput
+		getObjectOutput  *s3.GetObjectOutput
+		rangeOffsetFirst uint64
+		rangeOffsetLast  uint64
+	)
+
+	rangeOffsetFirst = lineNumber * globals.config.CacheLineSize
+	rangeOffsetLast = rangeOffsetFirst + globals.config.CacheLineSize - 1
+	if rangeOffsetLast > (fileInode.size - 1) {
+		rangeOffsetLast = fileInode.size - 1
+	}
+
+	getObjectInput = &s3.GetObjectInput{
+		Bucket: aws.String(globals.config.S3Bucket),
+		Key:    aws.String(fileInode.objectKey),
+		Range:  aws.String(fmt.Sprintf("bytes=%d-%d", rangeOffsetFirst, rangeOffsetLast)),
+	}
+
+	getObjectOutput, err = globals.s3Client.GetObject(context.TODO(), getObjectInput)
+	if err != nil {
+		return
+	}
+
+	objectCacheLine, err = io.ReadAll(getObjectOutput.Body)
+	if err != nil {
+		return
+	}
+
+	if uint64(len(objectCacheLine)) == (rangeOffsetLast - rangeOffsetFirst + 1) {
+		err = nil
+	} else {
+		err = fmt.Errorf("uint64(len(objectCacheLine)) [%v] != (rangeOffsetLast - rangeOffsetFirst + 1) [%v]", len(objectCacheLine), rangeOffsetLast-rangeOffsetFirst+1)
+	}
+
+	return
+}
+
 func (dummy *globalsStruct) DoRead(inHeader *fission.InHeader, readIn *fission.ReadIn) (readOut *fission.ReadOut, errno syscall.Errno) {
 	var (
 		cacheLineTag              cacheLineTagStruct
+		err                       error
 		fileCacheLine             *fileCacheLineStruct
 		fileInode                 *inodeStruct
 		fileOffsetCurrent         uint64
@@ -294,8 +345,10 @@ func (dummy *globalsStruct) DoRead(inHeader *fission.InHeader, readIn *fission.R
 						fileCacheLine.listElement = globals.fileCacheLRU.PushBack(fileCacheLine)
 						globals.fileCacheMap[fileCacheLine.tag] = fileCacheLine
 						globals.Unlock()
-						// TODO: Write ramCacheLineContent to file path fmt.Sprintf("%s/%08X_%08X", globals.fileCacheDir, tag.inodeNumber, tag.lineNumber)
-						fmt.Printf("UNDO: len(ramCacheLineContent): %v\n", len(ramCacheLineContent))
+						err = os.WriteFile(fmt.Sprintf("%s/%08X_%08X", globals.fileCacheDir, fileCacheLine.tag.inodeNumber, fileCacheLine.tag.lineNumber), ramCacheLineContent, 0666)
+						if err != nil {
+							globals.logger.Fatalf("os.WriteFile(\"%s/%08X_%08X\", ramCacheLineContent, 0666) failed: %v\n", fileCacheLine.tag.inodeNumber, fileCacheLine.tag.lineNumber, err)
+						}
 						fileCacheLine.Done()
 					}
 				}
@@ -324,7 +377,10 @@ func (dummy *globalsStruct) DoRead(inHeader *fission.InHeader, readIn *fission.R
 					_ = globals.fileCacheLRU.Remove(fileCacheLine.listElement)
 					delete(globals.fileCacheMap, fileCacheLine.tag)
 					globals.Unlock()
-					// TODO: Remove file path fmt.Sprintf("%s/%08X_%08X", globals.fileCacheDir, tag.inodeNumber, tag.lineNumber)
+					err = os.Remove(fmt.Sprintf("%s/%08X_%08X", globals.fileCacheDir, fileCacheLine.tag.inodeNumber, fileCacheLine.tag.lineNumber))
+					if err != nil {
+						globals.logger.Fatalf("os.Remove(\"%s/%08X_%08X\") failed: %v", fileCacheLine.tag.inodeNumber, fileCacheLine.tag.lineNumber, err)
+					}
 					fileCacheLine.Done()
 				}
 
@@ -365,7 +421,13 @@ func (dummy *globalsStruct) DoRead(inHeader *fission.InHeader, readIn *fission.R
 				ramCacheLine.listElement = globals.ramCacheLRU.PushBack(ramCacheLine)
 				globals.ramCacheMap[ramCacheLine.tag] = ramCacheLine
 				globals.Unlock()
-				// TODO: Read content from Object
+				ramCacheLineContent, err = fileInode.fetchCacheLine(ramCacheLine.tag.lineNumber)
+				if err != nil {
+					globals.logger.Fatalf("fileInode.fetchCacheLine(ramCacheLine.tag.lineNumber) failed: %v", err)
+				}
+				globals.Lock()
+				ramCacheLine.content = ramCacheLineContent
+				globals.Unlock()
 				ramCacheLine.Done()
 			} else {
 				fileCacheLine, ok = globals.fileCacheMap[cacheLineTag]
@@ -380,7 +442,13 @@ func (dummy *globalsStruct) DoRead(inHeader *fission.InHeader, readIn *fission.R
 						ramCacheLine.listElement = globals.ramCacheLRU.PushBack(ramCacheLine)
 						globals.ramCacheMap[ramCacheLine.tag] = ramCacheLine
 						globals.Unlock()
-						// TODO: Read content from file path fmt.Sprintf("%s/%08X_%08X", globals.fileCacheDir, tag.inodeNumber, tag.lineNumber)
+						ramCacheLineContent, err = os.ReadFile(fmt.Sprintf("%s/%08X_%08X", fileCacheLine.tag.inodeNumber, fileCacheLine.tag.lineNumber))
+						if err != nil {
+							globals.logger.Fatalf("os.ReadFile(\"%s/%08X_%08X\") failed: %v", fileCacheLine.tag.inodeNumber, fileCacheLine.tag.lineNumber, err)
+						}
+						globals.Lock()
+						ramCacheLine.content = ramCacheLineContent
+						globals.Unlock()
 						ramCacheLine.Done()
 					} else {
 						globals.Unlock()
@@ -395,7 +463,13 @@ func (dummy *globalsStruct) DoRead(inHeader *fission.InHeader, readIn *fission.R
 					ramCacheLine.listElement = globals.ramCacheLRU.PushBack(ramCacheLine)
 					globals.ramCacheMap[ramCacheLine.tag] = ramCacheLine
 					globals.Unlock()
-					// TODO: Read content from Object
+					ramCacheLineContent, err = fileInode.fetchCacheLine(ramCacheLine.tag.lineNumber)
+					if err != nil {
+						globals.logger.Fatalf("fileInode.fetchCacheLine(ramCacheLine.tag.lineNumber) failed: %v", err)
+					}
+					globals.Lock()
+					ramCacheLine.content = ramCacheLineContent
+					globals.Unlock()
 					ramCacheLine.Done()
 				}
 			}
