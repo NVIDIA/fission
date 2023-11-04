@@ -121,24 +121,26 @@ type cacheLineTagStruct struct {
 }
 
 type fileCacheLineStruct struct {
-	listElement *list.Element
-	tag         cacheLineTagStruct
-	// content stored in file at fmt.Sprintf("%s/%08X_%08X", globals.fileCacheDir, tag.inodeNumber, tag.lineNumber)
+	listElement    *list.Element
+	tag            cacheLineTagStruct
+	sync.WaitGroup      // used to signal those awaiting contentReady to become true or purge of this fileCacheLine
+	contentReady   bool // if true, content available at file path fmt.Sprintf("%s/%08X_%08X", globals.fileCacheDir, tag.inodeNumber, tag.lineNumber)
 }
 
 type ramCacheLineStruct struct {
-	listElement *list.Element
-	tag         cacheLineTagStruct
-	content     []byte // len() <= globals.config.CacheLineSize
+	listElement    *list.Element
+	tag            cacheLineTagStruct
+	sync.WaitGroup        // used to signal those awaiting content to be non-nil
+	content        []byte // len() <= globals.config.CacheLineSize; nil if being populated
 }
 
 type globalsStruct struct {
-	sync.Mutex   // protects {file|ram}Cache{LRU|Map}
 	config       *configStruct
 	logger       *log.Logger
 	s3Client     *s3.Client
 	inodeTable   []*inodeStruct // index == uint64(inodeNumber - 1)
 	blocks       uint64
+	sync.Mutex   // protects {file|ram}Cache{LRU|Map}
 	fileCacheDir string
 	fileCacheLRU *list.List                                  // fileCacheLineStruct.listElement linked LRU
 	fileCacheMap map[cacheLineTagStruct]*fileCacheLineStruct // key == fileCacheLineStruct.tag; value == *fileCacheLineStruct

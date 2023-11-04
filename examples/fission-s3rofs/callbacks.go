@@ -4,6 +4,7 @@
 package main
 
 import (
+	"container/list"
 	"fmt"
 	"math"
 	"syscall"
@@ -215,13 +216,17 @@ func (dummy *globalsStruct) DoOpen(inHeader *fission.InHeader, openIn *fission.O
 
 func (dummy *globalsStruct) DoRead(inHeader *fission.InHeader, readIn *fission.ReadIn) (readOut *fission.ReadOut, errno syscall.Errno) {
 	var (
-		cacheLineTag      cacheLineTagStruct
-		fileCacheLine     *fileCacheLineStruct
-		fileInode         *inodeStruct
-		fileOffsetCurrent uint64
-		fileOffsetLimit   uint64
-		ok                bool
-		ramCacheLine      *ramCacheLineStruct
+		cacheLineTag              cacheLineTagStruct
+		fileCacheLine             *fileCacheLineStruct
+		fileInode                 *inodeStruct
+		fileOffsetCurrent         uint64
+		fileOffsetLimit           uint64
+		listElement               *list.Element
+		ok                        bool
+		ramCacheLine              *ramCacheLineStruct
+		ramCacheLineContent       []byte
+		ramCacheLineContentLimit  uint64
+		ramCacheLineContentOffset uint64
 	)
 
 	fileInode = fetchInode(inHeader.NodeID)
@@ -250,188 +255,155 @@ func (dummy *globalsStruct) DoRead(inHeader *fission.InHeader, readIn *fission.R
 	}
 
 	for fileOffsetCurrent < fileOffsetLimit {
+		globals.Lock()
+
+		// First, see if we need to prune ramCache
+
+		if uint64(len(globals.ramCacheMap)) > globals.config.RAMCacheLines {
+			listElement = globals.ramCacheLRU.Front()
+			ramCacheLine, ok = listElement.Value.(*ramCacheLineStruct)
+			if !ok {
+				globals.logger.Fatalf("listElement.Value.(*ramCacheLineStruct) returned !ok")
+			}
+			if ramCacheLine.content == nil {
+				globals.Unlock()
+				ramCacheLine.Wait()
+			} else {
+				if globals.config.FileCacheLines == 0 {
+					ramCacheLine.content = nil
+					_ = globals.ramCacheLRU.Remove(ramCacheLine.listElement)
+					delete(globals.ramCacheMap, ramCacheLine.tag)
+					globals.Unlock()
+				} else {
+					fileCacheLine, ok = globals.fileCacheMap[ramCacheLine.tag]
+					if ok {
+						ramCacheLine.content = nil
+						_ = globals.ramCacheLRU.Remove(ramCacheLine.listElement)
+						delete(globals.ramCacheMap, ramCacheLine.tag)
+						globals.Unlock()
+					} else {
+						ramCacheLineContent = ramCacheLine.content
+						ramCacheLine.content = nil
+						_ = globals.ramCacheLRU.Remove(ramCacheLine.listElement)
+						delete(globals.ramCacheMap, ramCacheLine.tag)
+						fileCacheLine = &fileCacheLineStruct{
+							tag:          ramCacheLine.tag,
+							contentReady: false,
+						}
+						fileCacheLine.Add(1)
+						fileCacheLine.listElement = globals.fileCacheLRU.PushBack(fileCacheLine)
+						globals.fileCacheMap[fileCacheLine.tag] = fileCacheLine
+						globals.Unlock()
+						// TODO: Write ramCacheLineContent to file path fmt.Sprintf("%s/%08X_%08X", globals.fileCacheDir, tag.inodeNumber, tag.lineNumber)
+						fmt.Printf("UNDO: len(ramCacheLineContent): %v\n", len(ramCacheLineContent))
+						fileCacheLine.Done()
+					}
+				}
+			}
+
+			// However we reached here, just retry at fileOffsetCurrent
+
+			continue
+		}
+
+		// Next, see if we need to prune fileCache (if enabled)
+
+		if globals.config.FileCacheLines >= 0 {
+			if uint64(len(globals.fileCacheMap)) > globals.config.FileCacheLines {
+				listElement = globals.fileCacheLRU.Front()
+				fileCacheLine, ok = listElement.Value.(*fileCacheLineStruct)
+				if !ok {
+					globals.logger.Fatalf("listElement.Value.(*fileCacheLineStruct) returned !ok")
+				}
+				if !fileCacheLine.contentReady {
+					globals.Unlock()
+					fileCacheLine.Wait()
+				} else {
+					fileCacheLine.Add(1)
+					fileCacheLine.contentReady = false
+					_ = globals.fileCacheLRU.Remove(fileCacheLine.listElement)
+					delete(globals.fileCacheMap, fileCacheLine.tag)
+					globals.Unlock()
+					// TODO: Remove file path fmt.Sprintf("%s/%08X_%08X", globals.fileCacheDir, tag.inodeNumber, tag.lineNumber)
+					fileCacheLine.Done()
+				}
+
+				// However we reached here, just retry at fileOffsetCurrent
+
+				continue
+			}
+		}
+
 		cacheLineTag.inodeNumber = fileInode.inodeNumber
 		cacheLineTag.lineNumber = fileOffsetCurrent / globals.config.CacheLineSize
 
 		ramCacheLine, ok = globals.ramCacheMap[cacheLineTag]
-		if !ok {
-			fileCacheLine, ok = globals.fileCacheMap[cacheLineTag]
+		if ok {
+			if ramCacheLine.content == nil {
+				globals.Unlock()
+				ramCacheLine.Wait()
+			} else {
+				globals.ramCacheLRU.MoveToBack(ramCacheLine.listElement)
+				ramCacheLineContent = ramCacheLine.content
+				globals.Unlock()
+				ramCacheLineContentOffset = fileOffsetCurrent - (cacheLineTag.lineNumber * globals.config.CacheLineSize)
+				if (fileOffsetLimit + (uint64(len(ramCacheLineContent)) - ramCacheLineContentOffset)) > (fileOffsetLimit - fileOffsetCurrent) {
+					ramCacheLineContentLimit = ramCacheLineContentOffset + (fileOffsetLimit - fileOffsetCurrent)
+				} else {
+					ramCacheLineContentLimit = uint64(len(ramCacheLineContent))
+				}
+				readOut.Data = append(readOut.Data, ramCacheLineContent[ramCacheLineContentOffset:ramCacheLineContentLimit]...)
+				fileOffsetCurrent += (ramCacheLineContentLimit - ramCacheLineContentOffset)
+			}
+		} else {
+			if globals.config.FileCacheLines == 0 {
+				ramCacheLine = &ramCacheLineStruct{
+					tag:     cacheLineTag,
+					content: nil,
+				}
+				ramCacheLine.Add(1)
+				ramCacheLine.listElement = globals.ramCacheLRU.PushBack(ramCacheLine)
+				globals.ramCacheMap[ramCacheLine.tag] = ramCacheLine
+				globals.Unlock()
+				// TODO: Read content from Object
+				ramCacheLine.Done()
+			} else {
+				fileCacheLine, ok = globals.fileCacheMap[cacheLineTag]
+				if ok {
+					if fileCacheLine.contentReady {
+						globals.fileCacheLRU.MoveToBack(fileCacheLine.listElement)
+						ramCacheLine = &ramCacheLineStruct{
+							tag:     cacheLineTag,
+							content: nil,
+						}
+						ramCacheLine.Add(1)
+						ramCacheLine.listElement = globals.ramCacheLRU.PushBack(ramCacheLine)
+						globals.ramCacheMap[ramCacheLine.tag] = ramCacheLine
+						globals.Unlock()
+						// TODO: Read content from file path fmt.Sprintf("%s/%08X_%08X", globals.fileCacheDir, tag.inodeNumber, tag.lineNumber)
+						ramCacheLine.Done()
+					} else {
+						globals.Unlock()
+						fileCacheLine.Wait()
+					}
+				} else {
+					ramCacheLine = &ramCacheLineStruct{
+						tag:     cacheLineTag,
+						content: nil,
+					}
+					ramCacheLine.Add(1)
+					ramCacheLine.listElement = globals.ramCacheLRU.PushBack(ramCacheLine)
+					globals.ramCacheMap[ramCacheLine.tag] = ramCacheLine
+					globals.Unlock()
+					// TODO: Read content from Object
+					ramCacheLine.Done()
+				}
+			}
 		}
-		fmt.Printf("UNDO ok: %v\n", ok)
-		fmt.Printf("UNDO ramCacheLine: %v\n", ramCacheLine)
-		fmt.Printf("UNDO fileCacheLine: %v\n", fileCacheLine)
-
-		break // UNDO
 	}
 
 	errno = 0
 	return
-	/*
-		var (
-			authToken                  string
-			cacheLine                  *cacheLineStruct
-			cacheLineBufLimitOffset    uint64
-			cacheLineBufStartOffset    uint64
-			cacheLineObjectLimitOffset uint64
-			cacheLineObjectStartOffset uint64
-			cacheLineTag               cacheLineTagStruct
-			err                        error
-			fileCurrentOffset          uint64
-			fileInode                  *fileInodeStruct
-			fileLimitOffset            uint64
-			httpRequest                *http.Request
-			httpResponse               *http.Response
-			objectOffsetStart          uint64
-			objectOffsetLimit          uint64
-			listElement                *list.Element
-			objectURL                  string
-			ok                         bool
-			retryAfterReAuthAttempted  bool
-		)
-
-		fileInode, ok = globals.fileInodeMap[inHeader.NodeID]
-		if !ok {
-			errno = syscall.ENOENT
-			return
-		}
-
-		fileInode.ensureAttrInCache()
-
-		fileCurrentOffset = readIn.Offset
-		if fileCurrentOffset > fileInode.cachedAttr.Size {
-			fileCurrentOffset = fileInode.cachedAttr.Size
-		}
-
-		fileLimitOffset = fileCurrentOffset + uint64(readIn.Size)
-		if fileLimitOffset > fileInode.cachedAttr.Size {
-			fileLimitOffset = fileInode.cachedAttr.Size
-		}
-
-		objectURL = globals.config.ContainerURL + "/" + fileInode.objectName
-
-		readOut = &fission.ReadOut{
-			Data: make([]byte, 0, readIn.Size),
-		}
-
-		for fileCurrentOffset < fileLimitOffset {
-			cacheLineTag.inodeNumber = fileInode.inodeNumber
-			cacheLineTag.lineNumber = fileCurrentOffset / globals.config.CacheLineSize
-
-			globals.Lock()
-
-			cacheLine, ok = globals.readCacheMap[cacheLineTag]
-
-			if ok {
-				globals.readCacheLRU.MoveToBack(cacheLine.listElement)
-
-				globals.Unlock()
-
-				cacheLine.Wait()
-			} else {
-				for uint64(globals.readCacheLRU.Len()) >= globals.config.NumCacheLines {
-					listElement = globals.readCacheLRU.Front()
-					cacheLine, ok = listElement.Value.(*cacheLineStruct)
-					if !ok {
-						fmt.Printf("cacheLine, ok = listElement.Value.(*cacheLineStruct) returned !ok\n")
-						os.Exit(1)
-					}
-
-					_ = globals.readCacheLRU.Remove(listElement)
-					delete(globals.readCacheMap, cacheLine.tag)
-				}
-
-				cacheLine = &cacheLineStruct{
-					tag: cacheLineTag,
-					buf: nil,
-				}
-
-				cacheLine.Add(1)
-
-				cacheLine.listElement = globals.readCacheLRU.PushBack(cacheLine)
-				globals.readCacheMap[cacheLineTag] = cacheLine
-
-				globals.Unlock()
-
-				retryAfterReAuthAttempted = false
-
-			RetryAfterReAuth:
-
-				httpRequest, err = http.NewRequest("GET", objectURL, nil)
-				if nil != err {
-					fmt.Printf("http.NewRequest(\"GET\", \"%s\", nil) failed: %v\n", objectURL, err)
-					os.Exit(1)
-				}
-
-				httpRequest.Header["User-Agent"] = []string{httpUserAgent}
-
-				authToken = fetchAuthToken()
-				if "" != authToken {
-					httpRequest.Header["X-Auth-Token"] = []string{authToken}
-				}
-
-				objectOffsetStart = cacheLine.tag.lineNumber * globals.config.CacheLineSize
-
-				objectOffsetLimit = objectOffsetStart + globals.config.CacheLineSize
-				if objectOffsetLimit > fileInode.cachedAttr.Size {
-					objectOffsetLimit = fileInode.cachedAttr.Size
-				}
-
-				httpRequest.Header["Range"] = []string{fmt.Sprintf("bytes=%d-%d", objectOffsetStart, objectOffsetLimit-1)}
-
-				httpResponse, err = globals.httpClient.Do(httpRequest)
-				if nil != err {
-					fmt.Printf("globals.httpClient.Do(GET %s) failed: %v\n", objectURL, err)
-					os.Exit(1)
-				}
-
-				cacheLine.buf, err = ioutil.ReadAll(httpResponse.Body)
-				if nil != err {
-					fmt.Printf("ioutil.ReadAll(httpResponse.Body) failed: %v\n", err)
-					os.Exit(1)
-				}
-				err = httpResponse.Body.Close()
-				if nil != err {
-					fmt.Printf("httpResponse.Body.Close() failed: %v\n", err)
-					os.Exit(1)
-				}
-
-				if http.StatusUnauthorized == httpResponse.StatusCode {
-					if retryAfterReAuthAttempted {
-						fmt.Printf("Re-authorization failed - exiting\n")
-						os.Exit(1)
-					}
-
-					forceReAuth()
-
-					retryAfterReAuthAttempted = true
-
-					goto RetryAfterReAuth
-				}
-
-				if (200 > httpResponse.StatusCode) || (299 < httpResponse.StatusCode) {
-					fmt.Printf("globals.httpClient.Do(GET %s) returned unexpected Status: %s\n", objectURL, httpResponse.Status)
-					os.Exit(1)
-				}
-
-				cacheLine.Done()
-			}
-
-			cacheLineObjectStartOffset = cacheLine.tag.lineNumber * globals.config.CacheLineSize
-			cacheLineObjectLimitOffset = cacheLineObjectStartOffset + uint64(len(cacheLine.buf))
-
-			cacheLineBufStartOffset = fileCurrentOffset - cacheLineObjectStartOffset
-
-			if cacheLineObjectLimitOffset > fileLimitOffset {
-				cacheLineBufLimitOffset = cacheLineBufStartOffset + (fileLimitOffset - fileCurrentOffset)
-			} else {
-				cacheLineBufLimitOffset = uint64(len(cacheLine.buf))
-			}
-
-			readOut.Data = append(readOut.Data, cacheLine.buf[cacheLineBufStartOffset:cacheLineBufLimitOffset]...)
-
-			fileCurrentOffset += cacheLineBufLimitOffset - cacheLineBufStartOffset
-		}
-	*/
 }
 
 func (dummy *globalsStruct) DoWrite(inHeader *fission.InHeader, writeIn *fission.WriteIn) (writeOut *fission.WriteOut, errno syscall.Errno) {
