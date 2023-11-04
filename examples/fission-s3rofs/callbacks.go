@@ -266,18 +266,19 @@ func (fileInode *inodeStruct) fetchCacheLine(lineNumber uint64) (objectCacheLine
 
 func (dummy *globalsStruct) DoRead(inHeader *fission.InHeader, readIn *fission.ReadIn) (readOut *fission.ReadOut, errno syscall.Errno) {
 	var (
-		cacheLineTag              cacheLineTagStruct
-		err                       error
-		fileCacheLine             *fileCacheLineStruct
-		fileInode                 *inodeStruct
-		fileOffsetCurrent         uint64
-		fileOffsetLimit           uint64
-		listElement               *list.Element
-		ok                        bool
-		ramCacheLine              *ramCacheLineStruct
-		ramCacheLineContent       []byte
-		ramCacheLineContentLimit  uint64
-		ramCacheLineContentOffset uint64
+		cacheLineTag                 cacheLineTagStruct
+		err                          error
+		fileCacheLine                *fileCacheLineStruct
+		fileInode                    *inodeStruct
+		fileOffsetCurrent            uint64
+		fileOffsetLimit              uint64
+		listElement                  *list.Element
+		ok                           bool
+		ramCacheLine                 *ramCacheLineStruct
+		ramCacheLineContent          []byte
+		ramCacheLineContentLimit     uint64
+		ramCacheLineContentOffset    uint64
+		ramCacheLineContentRemaining uint64
 	)
 
 	fileInode = fetchInode(inHeader.NodeID)
@@ -403,7 +404,8 @@ func (dummy *globalsStruct) DoRead(inHeader *fission.InHeader, readIn *fission.R
 				ramCacheLineContent = ramCacheLine.content
 				globals.Unlock()
 				ramCacheLineContentOffset = fileOffsetCurrent - (cacheLineTag.lineNumber * globals.config.CacheLineSize)
-				if (fileOffsetLimit + (uint64(len(ramCacheLineContent)) - ramCacheLineContentOffset)) > (fileOffsetLimit - fileOffsetCurrent) {
+				ramCacheLineContentRemaining = uint64(len(ramCacheLineContent)) - ramCacheLineContentOffset
+				if ramCacheLineContentRemaining > (fileOffsetLimit - fileOffsetCurrent) {
 					ramCacheLineContentLimit = ramCacheLineContentOffset + (fileOffsetLimit - fileOffsetCurrent)
 				} else {
 					ramCacheLineContentLimit = uint64(len(ramCacheLineContent))
