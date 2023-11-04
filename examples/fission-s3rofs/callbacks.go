@@ -348,8 +348,11 @@ func (dummy *globalsStruct) DoRead(inHeader *fission.InHeader, readIn *fission.R
 						globals.Unlock()
 						err = os.WriteFile(fmt.Sprintf("%s/%08X_%08X", globals.fileCacheDir, fileCacheLine.tag.inodeNumber, fileCacheLine.tag.lineNumber), ramCacheLineContent, 0666)
 						if err != nil {
-							globals.logger.Fatalf("os.WriteFile(\"%s/%08X_%08X\", ramCacheLineContent, 0666) failed: %v\n", fileCacheLine.tag.inodeNumber, fileCacheLine.tag.lineNumber, err)
+							globals.logger.Fatalf("os.WriteFile(\"%s/%08X_%08X\", ramCacheLineContent, 0666) failed: %v\n", globals.fileCacheDir, fileCacheLine.tag.inodeNumber, fileCacheLine.tag.lineNumber, err)
 						}
+						globals.Lock()
+						fileCacheLine.contentReady = true
+						globals.Unlock()
 						fileCacheLine.Done()
 					}
 				}
@@ -444,9 +447,9 @@ func (dummy *globalsStruct) DoRead(inHeader *fission.InHeader, readIn *fission.R
 						ramCacheLine.listElement = globals.ramCacheLRU.PushBack(ramCacheLine)
 						globals.ramCacheMap[ramCacheLine.tag] = ramCacheLine
 						globals.Unlock()
-						ramCacheLineContent, err = os.ReadFile(fmt.Sprintf("%s/%08X_%08X", fileCacheLine.tag.inodeNumber, fileCacheLine.tag.lineNumber))
+						ramCacheLineContent, err = os.ReadFile(fmt.Sprintf("%s/%08X_%08X", globals.fileCacheDir, fileCacheLine.tag.inodeNumber, fileCacheLine.tag.lineNumber))
 						if err != nil {
-							globals.logger.Fatalf("os.ReadFile(\"%s/%08X_%08X\") failed: %v", fileCacheLine.tag.inodeNumber, fileCacheLine.tag.lineNumber, err)
+							globals.logger.Fatalf("os.ReadFile(\"%s/%08X_%08X\") failed: %v", globals.fileCacheDir, fileCacheLine.tag.inodeNumber, fileCacheLine.tag.lineNumber, err)
 						}
 						globals.Lock()
 						ramCacheLine.content = ramCacheLineContent
