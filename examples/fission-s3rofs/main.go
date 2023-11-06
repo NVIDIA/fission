@@ -32,8 +32,6 @@ import (
 )
 
 const (
-	verboseMode = false
-
 	fileCacheDirPattern = "fission-s3rofs_cache"
 
 	fuseSubtype = "fission-s3rofs"
@@ -89,6 +87,7 @@ const (
 )
 
 type configStruct struct {
+	Verbose           bool
 	MountPoint        string
 	S3AccessKeyMasked string `json:"S3AccessKey"`
 	s3AccessKey       string
@@ -254,7 +253,7 @@ func main() {
 		globals.logger.Fatalf("CacheLineSize must be > 0")
 	}
 
-	if verboseMode {
+	if globals.config.Verbose {
 		configAsJSON, err = json.Marshal(globals.config)
 		if err != nil {
 			globals.logger.Printf("json.Marshal(globals.config) failed: %v", err)

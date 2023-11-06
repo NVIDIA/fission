@@ -9,6 +9,7 @@ triggered by sending the process a SIGHUP, SIGINT, or SIGTERM.
 The program is launched with a single argument specifying the path to a JSON-formatted document with the following structure:
 ```
 {
+  "Verbose"        : false,
   "MountPoint"     : "/mnt",
   "S3AccessKey"    : "test:tester",
   "S3SecretKey"    : "testing",
@@ -16,11 +17,10 @@ The program is launched with a single argument specifying the path to a JSON-for
   "S3Region"       : "us-east-1",
   "S3Attempts"     : 5,
   "S3Backoff"      : 60,
-  "S3Bucket"       : "<bucket_name>",
-  "S3Prefix"       : "<object_name_prefix>",
-  "CacheDirPath"   : "/dev/null",
-  "FileCacheLines" : 0,
-  "RAMCacheLines"  : 1024,
+  "S3Bucket"       : "mybucket",
+  "S3Prefix"       : "",
+  "FileCacheLines" : 10000,
+  "RAMCacheLines"  : 1000,
   "CacheLineSize"  : 1048576
 }
 ```
