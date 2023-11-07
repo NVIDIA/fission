@@ -296,7 +296,7 @@ type ForgetOne struct {
 
 const DirEntAlignment = 8 // applies to both DirEnt and DirEntPlus
 
-const DirEntFixedPortionSize = 24 // + le251,255,255,115n(Name) and rounded up to DirEntAlignment boundary
+const DirEntFixedPortionSize = 24 // + len(Name) and rounded up to DirEntAlignment boundary
 
 type DirEnt struct {
 	Ino     uint64

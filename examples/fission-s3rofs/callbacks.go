@@ -878,7 +878,7 @@ func (dummy *globalsStruct) DoReadDirPlus(inHeader *fission.InHeader, readDirPlu
 			globals.logger.Fatalf(" dirTableEntryValue.(uint64) returned !ok")
 		}
 
-		dirEntPlusSize = fission.DirEntFixedPortionSize + uint64(len(dirTableEntryName)) + fission.DirEntAlignment - 1
+		dirEntPlusSize = fission.DirEntPlusFixedPortionSize + uint64(len(dirTableEntryName)) + fission.DirEntAlignment - 1
 		dirEntPlusSize /= fission.DirEntAlignment
 		dirEntPlusSize *= fission.DirEntAlignment
 
