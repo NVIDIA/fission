@@ -56,7 +56,6 @@ RUN echo "host_bucket = AUTH_test"   >> /root/.s3cfg
 RUN echo "secret_key  = testing"     >> /root/.s3cfg
 RUN echo "use_https   = False"       >> /root/.s3cfg
 
-VOLUME /fission
 WORKDIR /fission
 
 COPY . .
