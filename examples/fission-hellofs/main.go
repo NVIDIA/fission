@@ -270,6 +270,7 @@ func main() {
 	}
 
 	tot := int(1)
+	es := int(0)
 	for i := 1; i <= tot; i++ {
 		globals.volume = fission.NewVolume(globals.volumeName, globals.mountPoint, fuseSubtype, maxRead, maxWrite, false, false, &globals, globals.logger, globals.errChan)
 
@@ -279,13 +280,15 @@ func main() {
 			os.Exit(1)
 		}
 
-		b, e := os.ReadFile(globals.mountPoint + "/" + string(helloFileName[:]))
-		if e == nil {
-			fmt.Printf("[%v] Successfully read: %s", i, string(b[:]))
-		} else {
-			fmt.Printf("[%v] Failed to read: %v\n", i, e)
-			es++
-		}
+		// time.Sleep(4 * time.Second)
+
+		// b, e := os.ReadFile(globals.mountPoint + "/" + string(helloFileName[:]))
+		// if e == nil {
+		// 	fmt.Printf("[%v] Successfully read: %s", i, string(b[:]))
+		// } else {
+		// 	fmt.Printf("[%v] Failed to read: %v\n", i, e)
+		// 	es++
+		// }
 
 		// signalChan = make(chan os.Signal, 1)
 		// signal.Notify(signalChan, unix.SIGINT, unix.SIGTERM, unix.SIGHUP)
