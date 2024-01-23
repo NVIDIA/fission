@@ -370,6 +370,7 @@ func (volume *volumeStruct) devFuseFDReader() {
 		bytesRead        int
 		devFuseFDReadBuf []byte
 		err              error
+		inHeader         *InHeader
 	)
 
 	for {
@@ -416,8 +417,36 @@ func (volume *volumeStruct) devFuseFDReader() {
 
 		// Dispatch goroutine to process devFuseFDReadBuf
 
+		if len(devFuseFDReadBuf) < InHeaderSize {
+			// All we can do is just drop it
+			volume.logger.Printf("Read malformed message from /dev/fuse")
+			volume.devFuseFDReadPoolPut(devFuseFDReadBuf)
+			return
+		}
+
+		inHeader = &InHeader{
+			Len:     *(*uint32)(unsafe.Pointer(&devFuseFDReadBuf[0])),
+			OpCode:  *(*uint32)(unsafe.Pointer(&devFuseFDReadBuf[4])),
+			Unique:  *(*uint64)(unsafe.Pointer(&devFuseFDReadBuf[8])),
+			NodeID:  *(*uint64)(unsafe.Pointer(&devFuseFDReadBuf[16])),
+			UID:     *(*uint32)(unsafe.Pointer(&devFuseFDReadBuf[24])),
+			GID:     *(*uint32)(unsafe.Pointer(&devFuseFDReadBuf[28])),
+			PID:     *(*uint32)(unsafe.Pointer(&devFuseFDReadBuf[32])),
+			Padding: *(*uint32)(unsafe.Pointer(&devFuseFDReadBuf[36])),
+		}
+		fmt.Printf("...dispatching inHeader.OpCode: %v\n", inHeader.OpCode)
+
+		if OpCodePoll == inHeader.OpCode {
+			fmt.Printf("...got an OpCodePoll\n")
+			volume.devFuseFDReadPoolPut(devFuseFDReadBuf)
+			volume.devFuseFDWriter(inHeader, syscall.ENOSYS)
+			continue
+		}
+
 		volume.callbacksWG.Add(1)
-		go volume.processDevFuseFDReadBuf(devFuseFDReadBuf)
+		// go volume.processDevFuseFDReadBuf(devFuseFDReadBuf)
+		volume.processDevFuseFDReadBuf(devFuseFDReadBuf)
+		fmt.Printf("...back from dispatching inHeader.OpCode: %v\n", inHeader.OpCode)
 	}
 }
 

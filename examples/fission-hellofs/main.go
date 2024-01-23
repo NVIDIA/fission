@@ -7,12 +7,9 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"os/signal"
 	"path"
 	"syscall"
 	"time"
-
-	"golang.org/x/sys/unix"
 
 	"github.com/NVIDIA/fission"
 )
@@ -80,8 +77,8 @@ var globals globalsStruct
 
 func main() {
 	var (
-		err             error
-		signalChan      chan os.Signal
+		err error
+		// signalChan      chan os.Signal
 		unixTimeNowNSec uint32
 		unixTimeNowSec  uint64
 	)
@@ -99,7 +96,7 @@ func main() {
 
 	globals.logger = log.New(os.Stdout, "", log.Ldate|log.Ltime) // |log.Lmicroseconds|log.Lshortfile
 
-	globals.errChan = make(chan error, 1)
+	globals.errChan = make(chan error, 100)
 
 	unixTimeNowSec, unixTimeNowNSec = unixTimeNow()
 
@@ -272,30 +269,43 @@ func main() {
 		},
 	}
 
-	globals.volume = fission.NewVolume(globals.volumeName, globals.mountPoint, fuseSubtype, maxRead, maxWrite, false, false, &globals, globals.logger, globals.errChan)
+	tot := int(1)
+	for i := 1; i <= tot; i++ {
+		globals.volume = fission.NewVolume(globals.volumeName, globals.mountPoint, fuseSubtype, maxRead, maxWrite, false, false, &globals, globals.logger, globals.errChan)
 
-	err = globals.volume.DoMount()
-	if nil != err {
-		globals.logger.Printf("fission.DoMount() failed: %v", err)
-		os.Exit(1)
+		err = globals.volume.DoMount()
+		if nil != err {
+			globals.logger.Printf("fission.DoMount() failed: %v", err)
+			os.Exit(1)
+		}
+
+		b, e := os.ReadFile(globals.mountPoint + "/" + string(helloFileName[:]))
+		if e == nil {
+			fmt.Printf("[%v] Successfully read: %s", i, string(b[:]))
+		} else {
+			fmt.Printf("[%v] Failed to read: %v\n", i, e)
+			es++
+		}
+
+		// signalChan = make(chan os.Signal, 1)
+		// signal.Notify(signalChan, unix.SIGINT, unix.SIGTERM, unix.SIGHUP)
+
+		// select {
+		// case _ = <-signalChan:
+		// 	// Normal termination due to one of the above registered signals
+		// case err = <-globals.errChan:
+		// 	// Unexpected exit of /dev/fuse read loop since it's before we call DoUnmount()
+		// 	globals.logger.Printf("unexpected exit of /dev/fuse read loop: %v", err)
+		// }
+
+		err = globals.volume.DoUnmount()
+		if nil != err {
+			globals.logger.Printf("fission.DoUnmount() failed: %v", err)
+			os.Exit(1)
+		}
+		// time.Sleep(10 * 100 * time.Millisecond)
 	}
-
-	signalChan = make(chan os.Signal, 1)
-	signal.Notify(signalChan, unix.SIGINT, unix.SIGTERM, unix.SIGHUP)
-
-	select {
-	case _ = <-signalChan:
-		// Normal termination due to one of the above registered signals
-	case err = <-globals.errChan:
-		// Unexpected exit of /dev/fuse read loop since it's before we call DoUnmount()
-		globals.logger.Printf("unexpected exit of /dev/fuse read loop: %v", err)
-	}
-
-	err = globals.volume.DoUnmount()
-	if nil != err {
-		globals.logger.Printf("fission.DoUnmount() failed: %v", err)
-		os.Exit(1)
-	}
+	fmt.Printf("Of %v, total errors: %v\n", tot, es)
 }
 
 func unixTimeToGoTime(unixTimeSec uint64, unixTimeNSec uint32) (goTime time.Time) {

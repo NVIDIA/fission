@@ -5,6 +5,7 @@ package main
 
 import (
 	"bytes"
+	"fmt"
 	"syscall"
 
 	"github.com/NVIDIA/fission"
@@ -409,6 +410,7 @@ func (dummy *globalsStruct) DoDestroy(inHeader *fission.InHeader) (errno syscall
 }
 
 func (dummy *globalsStruct) DoPoll(inHeader *fission.InHeader, pollIn *fission.PollIn) (pollOut *fission.PollOut, errno syscall.Errno) {
+	fmt.Printf("[UNDO] DoPoll(inHeader: %#v, pollIn: %#v)\n", inHeader, pollIn)
 	errno = syscall.ENOSYS
 	return
 }
