@@ -796,17 +796,78 @@ func (volume *volumeStruct) doInit(inHeader *InHeader, devFuseFDReadBufPayload [
 		outPayload []byte
 	)
 
-	if len(devFuseFDReadBufPayload) != InitInSize {
+	if len(devFuseFDReadBufPayload) < InitInMinSize {
 		volume.logger.Printf("Call to doInit() with bad len(devFuseFDReadBufPayload) == %v", len(devFuseFDReadBufPayload))
 		volume.devFuseFDWriter(inHeader, syscall.EINVAL)
 		return
 	}
 
-	initIn = &InitIn{
-		Major:        *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[0])),
-		Minor:        *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[4])),
-		MaxReadAhead: *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[8])),
-		Flags:        *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[12])),
+	volume.fuseMajor = *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[0]))
+	volume.fuseMinor = *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[4]))
+
+	if volume.fuseMajor != 7 {
+		volume.logger.Printf("Call to doInit() with bad InitIn.Major == %v [must be 7]", volume.fuseMajor)
+		volume.devFuseFDWriter(inHeader, syscall.EINVAL)
+		return
+	}
+
+	switch {
+	case volume.fuseMinor == 17:
+		if len(devFuseFDReadBufPayload) != InitInUpThru735Size {
+			volume.logger.Printf("Call to doInit() with bad len(devFuseFDReadBufPayload) == %v", len(devFuseFDReadBufPayload))
+			volume.devFuseFDWriter(inHeader, syscall.EINVAL)
+			return
+		}
+		initIn = &InitIn{
+			Major:        volume.fuseMajor,
+			Minor:        volume.fuseMinor,
+			MaxReadAhead: *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[8])),
+			Flags:        *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[12])),
+			Flags2:       0,
+		}
+	case (volume.fuseMinor >= 21) && (volume.fuseMinor <= 30):
+		if len(devFuseFDReadBufPayload) != InitInUpThru735Size {
+			volume.logger.Printf("Call to doInit() with bad len(devFuseFDReadBufPayload) == %v", len(devFuseFDReadBufPayload))
+			volume.devFuseFDWriter(inHeader, syscall.EINVAL)
+			return
+		}
+		initIn = &InitIn{
+			Major:        volume.fuseMajor,
+			Minor:        volume.fuseMinor,
+			MaxReadAhead: *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[8])),
+			Flags:        *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[12])),
+			Flags2:       0,
+		}
+	case (volume.fuseMinor >= 32) && (volume.fuseMinor <= 35):
+		if len(devFuseFDReadBufPayload) != InitInUpThru735Size {
+			volume.logger.Printf("Call to doInit() with bad len(devFuseFDReadBufPayload) == %v", len(devFuseFDReadBufPayload))
+			volume.devFuseFDWriter(inHeader, syscall.EINVAL)
+			return
+		}
+		initIn = &InitIn{
+			Major:        volume.fuseMajor,
+			Minor:        volume.fuseMinor,
+			MaxReadAhead: *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[8])),
+			Flags:        *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[12])),
+			Flags2:       0,
+		}
+	case volume.fuseMinor >= 36:
+		if len(devFuseFDReadBufPayload) != InitInFrom736OnSize {
+			volume.logger.Printf("Call to doInit() with bad len(devFuseFDReadBufPayload) == %v", len(devFuseFDReadBufPayload))
+			volume.devFuseFDWriter(inHeader, syscall.EINVAL)
+			return
+		}
+		initIn = &InitIn{
+			Major:        volume.fuseMajor,
+			Minor:        volume.fuseMinor,
+			MaxReadAhead: *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[8])),
+			Flags:        *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[12])),
+			Flags2:       *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[16])),
+		}
+	default:
+		volume.logger.Printf("Call to doInit() with bad InitIn.Minor == %v [must be >= 17 but not 18-20 or 31]", volume.fuseMinor)
+		volume.devFuseFDWriter(inHeader, syscall.EINVAL)
+		return
 	}
 
 	initOut, errno = volume.callbacks.DoInit(inHeader, initIn)
@@ -816,26 +877,123 @@ func (volume *volumeStruct) doInit(inHeader *InHeader, devFuseFDReadBufPayload [
 		return
 	}
 
-	outPayload = make([]byte, InitOutSize)
+	if initOut.Major != 7 {
+		volume.logger.Printf("Call to doInit() with bad InitOut.Major == %v [must be 7]", initOut.Major)
+		volume.devFuseFDWriter(inHeader, syscall.EINVAL)
+		return
+	}
 
-	*(*uint32)(unsafe.Pointer(&outPayload[0])) = initOut.Major
-	*(*uint32)(unsafe.Pointer(&outPayload[4])) = initOut.Minor
-	*(*uint32)(unsafe.Pointer(&outPayload[8])) = initOut.MaxReadAhead
-	*(*uint32)(unsafe.Pointer(&outPayload[12])) = initOut.Flags
-	*(*uint16)(unsafe.Pointer(&outPayload[16])) = initOut.MaxBackground
-	*(*uint16)(unsafe.Pointer(&outPayload[18])) = initOut.CongestionThreshhold
-	*(*uint32)(unsafe.Pointer(&outPayload[20])) = initOut.MaxWrite
-	*(*uint32)(unsafe.Pointer(&outPayload[24])) = initOut.TimeGran
-	*(*uint16)(unsafe.Pointer(&outPayload[28])) = initOut.MaxPages
-	*(*uint16)(unsafe.Pointer(&outPayload[30])) = initOut.MapAlignment
-	*(*uint32)(unsafe.Pointer(&outPayload[32])) = initOut.Flags2
-	*(*uint32)(unsafe.Pointer(&outPayload[36])) = initOut.Unused[0]
-	*(*uint32)(unsafe.Pointer(&outPayload[40])) = initOut.Unused[1]
-	*(*uint32)(unsafe.Pointer(&outPayload[44])) = initOut.Unused[2]
-	*(*uint32)(unsafe.Pointer(&outPayload[48])) = initOut.Unused[3]
-	*(*uint32)(unsafe.Pointer(&outPayload[52])) = initOut.Unused[4]
-	*(*uint32)(unsafe.Pointer(&outPayload[56])) = initOut.Unused[5]
-	*(*uint32)(unsafe.Pointer(&outPayload[60])) = initOut.Unused[6]
+	switch {
+	case initOut.Minor == 17:
+		outPayload = make([]byte, InitOut717Size)
+
+		*(*uint32)(unsafe.Pointer(&outPayload[0])) = initOut.Major
+		*(*uint32)(unsafe.Pointer(&outPayload[4])) = initOut.Minor
+		*(*uint32)(unsafe.Pointer(&outPayload[8])) = initOut.MaxReadAhead
+		*(*uint32)(unsafe.Pointer(&outPayload[12])) = initOut.Flags
+		*(*uint16)(unsafe.Pointer(&outPayload[16])) = initOut.MaxBackground
+		*(*uint16)(unsafe.Pointer(&outPayload[18])) = initOut.CongestionThreshhold
+		*(*uint32)(unsafe.Pointer(&outPayload[20])) = initOut.MaxWrite
+	case (initOut.Minor >= 21) && (initOut.Minor <= 22):
+		outPayload = make([]byte, InitOut721Thru722Size)
+
+		*(*uint32)(unsafe.Pointer(&outPayload[0])) = initOut.Major
+		*(*uint32)(unsafe.Pointer(&outPayload[4])) = initOut.Minor
+		*(*uint32)(unsafe.Pointer(&outPayload[8])) = initOut.MaxReadAhead
+		*(*uint32)(unsafe.Pointer(&outPayload[12])) = initOut.Flags
+		*(*uint16)(unsafe.Pointer(&outPayload[16])) = initOut.MaxBackground
+		*(*uint16)(unsafe.Pointer(&outPayload[18])) = initOut.CongestionThreshhold
+		*(*uint32)(unsafe.Pointer(&outPayload[20])) = initOut.MaxWrite
+	case (initOut.Minor >= 23) && (initOut.Minor <= 27):
+		outPayload = make([]byte, InitOut723Thru727Size)
+
+		*(*uint32)(unsafe.Pointer(&outPayload[0])) = initOut.Major
+		*(*uint32)(unsafe.Pointer(&outPayload[4])) = initOut.Minor
+		*(*uint32)(unsafe.Pointer(&outPayload[8])) = initOut.MaxReadAhead
+		*(*uint32)(unsafe.Pointer(&outPayload[12])) = initOut.Flags
+		*(*uint16)(unsafe.Pointer(&outPayload[16])) = initOut.MaxBackground
+		*(*uint16)(unsafe.Pointer(&outPayload[18])) = initOut.CongestionThreshhold
+		*(*uint32)(unsafe.Pointer(&outPayload[20])) = initOut.MaxWrite
+		*(*uint32)(unsafe.Pointer(&outPayload[24])) = initOut.TimeGran
+		*(*uint32)(unsafe.Pointer(&outPayload[28])) = 0
+		*(*uint32)(unsafe.Pointer(&outPayload[32])) = 0
+		*(*uint32)(unsafe.Pointer(&outPayload[36])) = 0
+		*(*uint32)(unsafe.Pointer(&outPayload[40])) = 0
+		*(*uint32)(unsafe.Pointer(&outPayload[44])) = 0
+		*(*uint32)(unsafe.Pointer(&outPayload[48])) = 0
+		*(*uint32)(unsafe.Pointer(&outPayload[52])) = 0
+		*(*uint32)(unsafe.Pointer(&outPayload[56])) = 0
+		*(*uint32)(unsafe.Pointer(&outPayload[60])) = 0
+	case (initOut.Minor >= 28) && (initOut.Minor <= 30):
+		outPayload = make([]byte, InitOut728Thru731aSize)
+
+		*(*uint32)(unsafe.Pointer(&outPayload[0])) = initOut.Major
+		*(*uint32)(unsafe.Pointer(&outPayload[4])) = initOut.Minor
+		*(*uint32)(unsafe.Pointer(&outPayload[8])) = initOut.MaxReadAhead
+		*(*uint32)(unsafe.Pointer(&outPayload[12])) = initOut.Flags
+		*(*uint16)(unsafe.Pointer(&outPayload[16])) = initOut.MaxBackground
+		*(*uint16)(unsafe.Pointer(&outPayload[18])) = initOut.CongestionThreshhold
+		*(*uint32)(unsafe.Pointer(&outPayload[20])) = initOut.MaxWrite
+		*(*uint32)(unsafe.Pointer(&outPayload[24])) = initOut.TimeGran
+		*(*uint16)(unsafe.Pointer(&outPayload[28])) = initOut.MaxPages
+		*(*uint16)(unsafe.Pointer(&outPayload[30])) = 0
+		*(*uint32)(unsafe.Pointer(&outPayload[32])) = 0
+		*(*uint32)(unsafe.Pointer(&outPayload[36])) = 0
+		*(*uint32)(unsafe.Pointer(&outPayload[40])) = 0
+		*(*uint32)(unsafe.Pointer(&outPayload[44])) = 0
+		*(*uint32)(unsafe.Pointer(&outPayload[48])) = 0
+		*(*uint32)(unsafe.Pointer(&outPayload[52])) = 0
+		*(*uint32)(unsafe.Pointer(&outPayload[56])) = 0
+		*(*uint32)(unsafe.Pointer(&outPayload[60])) = 0
+	case (initOut.Minor >= 32) && (initOut.Minor <= 35):
+		outPayload = make([]byte, InitOut731bThru735Size)
+
+		*(*uint32)(unsafe.Pointer(&outPayload[0])) = initOut.Major
+		*(*uint32)(unsafe.Pointer(&outPayload[4])) = initOut.Minor
+		*(*uint32)(unsafe.Pointer(&outPayload[8])) = initOut.MaxReadAhead
+		*(*uint32)(unsafe.Pointer(&outPayload[12])) = initOut.Flags
+		*(*uint16)(unsafe.Pointer(&outPayload[16])) = initOut.MaxBackground
+		*(*uint16)(unsafe.Pointer(&outPayload[18])) = initOut.CongestionThreshhold
+		*(*uint32)(unsafe.Pointer(&outPayload[20])) = initOut.MaxWrite
+		*(*uint32)(unsafe.Pointer(&outPayload[24])) = initOut.TimeGran
+		*(*uint16)(unsafe.Pointer(&outPayload[28])) = initOut.MaxPages
+		*(*uint16)(unsafe.Pointer(&outPayload[30])) = initOut.MapAlignment
+		*(*uint32)(unsafe.Pointer(&outPayload[32])) = 0
+		*(*uint32)(unsafe.Pointer(&outPayload[36])) = 0
+		*(*uint32)(unsafe.Pointer(&outPayload[40])) = 0
+		*(*uint32)(unsafe.Pointer(&outPayload[44])) = 0
+		*(*uint32)(unsafe.Pointer(&outPayload[48])) = 0
+		*(*uint32)(unsafe.Pointer(&outPayload[52])) = 0
+		*(*uint32)(unsafe.Pointer(&outPayload[56])) = 0
+		*(*uint32)(unsafe.Pointer(&outPayload[60])) = 0
+	case initOut.Minor >= 36:
+		outPayload = make([]byte, InitOut736AndBeyondSize)
+
+		*(*uint32)(unsafe.Pointer(&outPayload[0])) = initOut.Major
+		*(*uint32)(unsafe.Pointer(&outPayload[4])) = initOut.Minor
+		*(*uint32)(unsafe.Pointer(&outPayload[8])) = initOut.MaxReadAhead
+		*(*uint32)(unsafe.Pointer(&outPayload[12])) = initOut.Flags
+		*(*uint16)(unsafe.Pointer(&outPayload[16])) = initOut.MaxBackground
+		*(*uint16)(unsafe.Pointer(&outPayload[18])) = initOut.CongestionThreshhold
+		*(*uint32)(unsafe.Pointer(&outPayload[20])) = initOut.MaxWrite
+		*(*uint32)(unsafe.Pointer(&outPayload[24])) = initOut.TimeGran
+		*(*uint16)(unsafe.Pointer(&outPayload[28])) = initOut.MaxPages
+		*(*uint16)(unsafe.Pointer(&outPayload[30])) = initOut.MapAlignment
+		*(*uint32)(unsafe.Pointer(&outPayload[32])) = initOut.Flags2
+		*(*uint32)(unsafe.Pointer(&outPayload[36])) = 0
+		*(*uint32)(unsafe.Pointer(&outPayload[40])) = 0
+		*(*uint32)(unsafe.Pointer(&outPayload[44])) = 0
+		*(*uint32)(unsafe.Pointer(&outPayload[48])) = 0
+		*(*uint32)(unsafe.Pointer(&outPayload[52])) = 0
+		*(*uint32)(unsafe.Pointer(&outPayload[56])) = 0
+		*(*uint32)(unsafe.Pointer(&outPayload[60])) = 0
+	default:
+		volume.logger.Printf("Call to doInit() with bad InitOut.Minor == %v [must be >= 17 but not 18-20 or 31]", initOut.Minor)
+		volume.devFuseFDWriter(inHeader, syscall.EINVAL)
+		return
+	}
+
+	volume.fuseMinor = initOut.Minor // just in case volume.callbacks.DoInit() changed it...
 
 	volume.devFuseFDWriter(inHeader, 0, outPayload)
 }

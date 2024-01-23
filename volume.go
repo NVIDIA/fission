@@ -34,6 +34,8 @@ type volumeStruct struct {
 	devFuseFile        *os.File
 	devFuseFDReaderWG  sync.WaitGroup
 	callbacksWG        sync.WaitGroup
+	fuseMajor          uint32
+	fuseMinor          uint32
 }
 
 const (
@@ -71,6 +73,8 @@ func newVolume(volumeName string, mountpointDirPath string, fuseSubtype string, 
 		logger:             logger,
 		errChan:            errChan,
 		devFuseFDReadSize:  devFuseFDReadSize,
+		fuseMajor:          0,
+		fuseMinor:          0,
 	}
 
 	volume.devFuseFDReadPool = sync.Pool{
