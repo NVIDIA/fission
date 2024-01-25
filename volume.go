@@ -298,20 +298,20 @@ func (volume *volumeStruct) DoUnmount() (err error) {
 		return
 	}
 
-	unmountCmd = exec.Command(fusermountProgramPath, "-u", volume.mountpointDirPath)
+	unmountCmd = exec.Command(fusermountProgramPath, "-u", "-q", "-z", volume.mountpointDirPath)
 	unmountCmdCombinedOutput, err = unmountCmd.CombinedOutput()
 	if nil != err {
 		volume.logger.Printf("DoUnmount() unable to unmount %s (%v): %s", volume.volumeName, err, string(unmountCmdCombinedOutput[:]))
 		return
 	}
 
-	err = syscall.Close(volume.devFuseFD)
-	if nil != err {
-		volume.logger.Printf("DoUnmount() unable to close /dev/fuse: %v", err)
-		return
-	}
-
 	volume.devFuseFDReaderWG.Wait()
+
+	// err = syscall.Close(volume.devFuseFD)
+	// if nil != err {
+	// 	volume.logger.Printf("DoUnmount() unable to close /dev/fuse: %v", err)
+	// 	return
+	// }
 
 	volume.logger.Printf("Volume %s unmounted from mountpoint %s", volume.volumeName, volume.mountpointDirPath)
 
@@ -378,6 +378,7 @@ func (volume *volumeStruct) devFuseFDReader() {
 
 	RetrySyscallRead:
 		bytesRead, err = syscall.Read(volume.devFuseFD, devFuseFDReadBuf)
+		fmt.Printf("syscall.Read() returned bytesRead: %v err: %v\n", bytesRead, err)
 		if nil != err {
 			// First check for EINTR
 
@@ -444,9 +445,9 @@ func (volume *volumeStruct) devFuseFDReader() {
 		}
 
 		volume.callbacksWG.Add(1)
-		// go volume.processDevFuseFDReadBuf(devFuseFDReadBuf)
-		volume.processDevFuseFDReadBuf(devFuseFDReadBuf)
-		fmt.Printf("...back from dispatching inHeader.OpCode: %v\n", inHeader.OpCode)
+		go volume.processDevFuseFDReadBuf(devFuseFDReadBuf)
+		// volume.processDevFuseFDReadBuf(devFuseFDReadBuf)
+		// fmt.Printf("...back from dispatching inHeader.OpCode: %v\n", inHeader.OpCode)
 	}
 }
 

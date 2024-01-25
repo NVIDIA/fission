@@ -269,9 +269,10 @@ func main() {
 		},
 	}
 
-	tot := int(1)
+	tot := int(200)
 	es := int(0)
 	for i := 1; i <= tot; i++ {
+		fmt.Printf("Of %v, iteration: %v\n", tot, i)
 		globals.volume = fission.NewVolume(globals.volumeName, globals.mountPoint, fuseSubtype, maxRead, maxWrite, false, false, &globals, globals.logger, globals.errChan)
 
 		err = globals.volume.DoMount()
