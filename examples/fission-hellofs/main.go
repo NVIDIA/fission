@@ -269,7 +269,7 @@ func main() {
 		},
 	}
 
-	tot := int(200)
+	tot := int(1)
 	es := int(0)
 	for i := 1; i <= tot; i++ {
 		fmt.Printf("Of %v, iteration: %v\n", tot, i)
