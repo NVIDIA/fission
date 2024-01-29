@@ -194,7 +194,7 @@ func (volume *volumeStruct) DoMount() (err error) {
 		Args: []string{
 			fusermountProgramPath,
 			"-o", mountOptions,
-			volume.mountpointDirPath,
+			"--", volume.mountpointDirPath,
 		},
 		Env:          append(os.Environ(), "_FUSE_COMMFD=3"),
 		Dir:          "",
@@ -298,7 +298,7 @@ func (volume *volumeStruct) DoUnmount() (err error) {
 		return
 	}
 
-	unmountCmd = exec.Command(fusermountProgramPath, "-u", "-q", "-z", volume.mountpointDirPath)
+	unmountCmd = exec.Command(fusermountProgramPath, "-u", "--", volume.mountpointDirPath)
 	unmountCmdCombinedOutput, err = unmountCmd.CombinedOutput()
 	if nil != err {
 		volume.logger.Printf("DoUnmount() unable to unmount %s (%v): %s", volume.volumeName, err, string(unmountCmdCombinedOutput[:]))
@@ -370,7 +370,7 @@ func (volume *volumeStruct) devFuseFDReader() {
 		bytesRead        int
 		devFuseFDReadBuf []byte
 		err              error
-		inHeader         *InHeader
+		// inHeader         *InHeader
 	)
 
 	for {
@@ -419,31 +419,31 @@ func (volume *volumeStruct) devFuseFDReader() {
 
 		// Dispatch goroutine to process devFuseFDReadBuf
 
-		if len(devFuseFDReadBuf) < InHeaderSize {
-			// All we can do is just drop it
-			volume.logger.Printf("Read malformed message from /dev/fuse")
-			volume.devFuseFDReadPoolPut(devFuseFDReadBuf)
-			return
-		}
+		// if len(devFuseFDReadBuf) < InHeaderSize {
+		// 	// All we can do is just drop it
+		// 	volume.logger.Printf("Read malformed message from /dev/fuse")
+		// 	volume.devFuseFDReadPoolPut(devFuseFDReadBuf)
+		// 	return
+		// }
 
-		inHeader = &InHeader{
-			Len:     *(*uint32)(unsafe.Pointer(&devFuseFDReadBuf[0])),
-			OpCode:  *(*uint32)(unsafe.Pointer(&devFuseFDReadBuf[4])),
-			Unique:  *(*uint64)(unsafe.Pointer(&devFuseFDReadBuf[8])),
-			NodeID:  *(*uint64)(unsafe.Pointer(&devFuseFDReadBuf[16])),
-			UID:     *(*uint32)(unsafe.Pointer(&devFuseFDReadBuf[24])),
-			GID:     *(*uint32)(unsafe.Pointer(&devFuseFDReadBuf[28])),
-			PID:     *(*uint32)(unsafe.Pointer(&devFuseFDReadBuf[32])),
-			Padding: *(*uint32)(unsafe.Pointer(&devFuseFDReadBuf[36])),
-		}
-		fmt.Printf("...dispatching inHeader.OpCode: %v\n", inHeader.OpCode)
+		// inHeader = &InHeader{
+		// 	Len:     *(*uint32)(unsafe.Pointer(&devFuseFDReadBuf[0])),
+		// 	OpCode:  *(*uint32)(unsafe.Pointer(&devFuseFDReadBuf[4])),
+		// 	Unique:  *(*uint64)(unsafe.Pointer(&devFuseFDReadBuf[8])),
+		// 	NodeID:  *(*uint64)(unsafe.Pointer(&devFuseFDReadBuf[16])),
+		// 	UID:     *(*uint32)(unsafe.Pointer(&devFuseFDReadBuf[24])),
+		// 	GID:     *(*uint32)(unsafe.Pointer(&devFuseFDReadBuf[28])),
+		// 	PID:     *(*uint32)(unsafe.Pointer(&devFuseFDReadBuf[32])),
+		// 	Padding: *(*uint32)(unsafe.Pointer(&devFuseFDReadBuf[36])),
+		// }
+		// fmt.Printf("...dispatching inHeader.OpCode: %v\n", inHeader.OpCode)
 
-		if OpCodePoll == inHeader.OpCode {
-			fmt.Printf("...got an OpCodePoll\n")
-			volume.devFuseFDReadPoolPut(devFuseFDReadBuf)
-			volume.devFuseFDWriter(inHeader, syscall.ENOSYS)
-			continue
-		}
+		// if OpCodePoll == inHeader.OpCode {
+		// 	fmt.Printf("...got an OpCodePoll\n")
+		// 	volume.devFuseFDReadPoolPut(devFuseFDReadBuf)
+		// 	volume.devFuseFDWriter(inHeader, syscall.ENOSYS)
+		// 	continue
+		// }
 
 		volume.callbacksWG.Add(1)
 		go volume.processDevFuseFDReadBuf(devFuseFDReadBuf)
@@ -475,6 +475,7 @@ func (volume *volumeStruct) processDevFuseFDReadBuf(devFuseFDReadBuf []byte) {
 		PID:     *(*uint32)(unsafe.Pointer(&devFuseFDReadBuf[32])),
 		Padding: *(*uint32)(unsafe.Pointer(&devFuseFDReadBuf[36])),
 	}
+	fmt.Printf("[DEBUG]...dispatching inHeader.OpCode: %v\n", inHeader.OpCode)
 
 	switch inHeader.OpCode {
 	case OpCodeLookup:

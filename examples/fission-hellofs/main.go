@@ -274,7 +274,7 @@ func main() {
 	fmt.Printf("[DEBUG] runtime.GOMAXPROCS() was: %v\n", runtime.GOMAXPROCS(0))
 	_ = runtime.GOMAXPROCS(256)
 	fmt.Printf("[DEBUG] runtime.GOMAXPROCS() now: %v\n", runtime.GOMAXPROCS(0))
-	tot := int(1)
+	tot := int(10000)
 	es := int(0)
 	for i := 1; i <= tot; i++ {
 		fmt.Printf("\n[DEBUG] Of %v, iteration: %v\n\n", tot, i)
@@ -285,7 +285,7 @@ func main() {
 			globals.logger.Printf("fission.DoMount() failed: %v", err)
 			os.Exit(1)
 		}
-		time.Sleep(400 * time.Millisecond) // DEBUG
+		// time.Sleep(4000 * time.Millisecond) // DEBUG
 
 		if nil == err {
 			b, e := os.ReadFile(globals.mountPoint + "/" + string(helloFileName[:]))
