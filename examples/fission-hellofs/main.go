@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"path"
+	"runtime"
 	"syscall"
 	"time"
 
@@ -269,10 +270,14 @@ func main() {
 		},
 	}
 
+	fmt.Printf("[DEBUG] runtime.NumCPU(): %v\n", runtime.NumCPU())
+	fmt.Printf("[DEBUG] runtime.GOMAXPROCS() was: %v\n", runtime.GOMAXPROCS(0))
+	_ = runtime.GOMAXPROCS(256)
+	fmt.Printf("[DEBUG] runtime.GOMAXPROCS() now: %v\n", runtime.GOMAXPROCS(0))
 	tot := int(1)
 	es := int(0)
 	for i := 1; i <= tot; i++ {
-		fmt.Printf("Of %v, iteration: %v\n", tot, i)
+		fmt.Printf("\n[DEBUG] Of %v, iteration: %v\n\n", tot, i)
 		globals.volume = fission.NewVolume(globals.volumeName, globals.mountPoint, fuseSubtype, maxRead, maxWrite, false, false, &globals, globals.logger, globals.errChan)
 
 		err = globals.volume.DoMount()
@@ -280,16 +285,17 @@ func main() {
 			globals.logger.Printf("fission.DoMount() failed: %v", err)
 			os.Exit(1)
 		}
+		time.Sleep(400 * time.Millisecond) // DEBUG
 
-		// time.Sleep(4 * time.Second)
-
-		// b, e := os.ReadFile(globals.mountPoint + "/" + string(helloFileName[:]))
-		// if e == nil {
-		// 	fmt.Printf("[%v] Successfully read: %s", i, string(b[:]))
-		// } else {
-		// 	fmt.Printf("[%v] Failed to read: %v\n", i, e)
-		// 	es++
-		// }
+		if nil == err {
+			b, e := os.ReadFile(globals.mountPoint + "/" + string(helloFileName[:]))
+			if e == nil {
+				fmt.Printf("[%v] Successfully read: %s", i, string(b[:]))
+			} else {
+				fmt.Printf("[%v] Failed to read: %v\n", i, e)
+				es++
+			}
+		}
 
 		// signalChan = make(chan os.Signal, 1)
 		// signal.Notify(signalChan, unix.SIGINT, unix.SIGTERM, unix.SIGHUP)
@@ -307,9 +313,9 @@ func main() {
 			globals.logger.Printf("fission.DoUnmount() failed: %v", err)
 			os.Exit(1)
 		}
-		// time.Sleep(10 * 100 * time.Millisecond)
+		time.Sleep(400 * time.Millisecond)
 	}
-	fmt.Printf("Of %v, total errors: %v\n", tot, es)
+	fmt.Printf("\n[DEBUG] Of %v, total errors: %v\n\n", tot, es)
 }
 
 func unixTimeToGoTime(unixTimeSec uint64, unixTimeNSec uint32) (goTime time.Time) {

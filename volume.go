@@ -392,6 +392,7 @@ func (volume *volumeStruct) devFuseFDReader() {
 
 			if 0 == strings.Compare("operation not permitted", err.Error()) {
 				// Special case... simply retry the Read
+				fmt.Printf("[DEBUG] Special case... simply retry the Read\n")
 				continue
 			}
 
