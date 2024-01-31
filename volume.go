@@ -36,6 +36,7 @@ type volumeStruct struct {
 	callbacksWG        sync.WaitGroup
 	fuseMajor          uint32
 	fuseMinor          uint32
+	doInitWG           sync.WaitGroup
 }
 
 const (
@@ -194,7 +195,7 @@ func (volume *volumeStruct) DoMount() (err error) {
 		Args: []string{
 			fusermountProgramPath,
 			"-o", mountOptions,
-			volume.mountpointDirPath,
+			"--", volume.mountpointDirPath,
 		},
 		Env:          append(os.Environ(), "_FUSE_COMMFD=3"),
 		Dir:          "",
@@ -224,6 +225,8 @@ func (volume *volumeStruct) DoMount() (err error) {
 		volume.logger.Printf("Volume %s DoMount() unable to create mountCmd.StderrPipe: %v", volume.volumeName, err)
 		return
 	}
+
+	volume.doInitWG.Add(1)
 
 	err = mountCmd.Start()
 	if nil != err {
@@ -279,6 +282,8 @@ func (volume *volumeStruct) DoMount() (err error) {
 		return
 	}
 
+	volume.doInitWG.Wait()
+
 	volume.logger.Printf("Volume %s mounted on mountpoint %s", volume.volumeName, volume.mountpointDirPath)
 
 	err = nil
@@ -298,7 +303,7 @@ func (volume *volumeStruct) DoUnmount() (err error) {
 		return
 	}
 
-	unmountCmd = exec.Command(fusermountProgramPath, "-u", volume.mountpointDirPath)
+	unmountCmd = exec.Command(fusermountProgramPath, "-u", "-q", "-z", "--", volume.mountpointDirPath)
 	unmountCmdCombinedOutput, err = unmountCmd.CombinedOutput()
 	if nil != err {
 		volume.logger.Printf("DoUnmount() unable to unmount %s (%v): %s", volume.volumeName, err, string(unmountCmdCombinedOutput[:]))

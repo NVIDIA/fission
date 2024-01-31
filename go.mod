@@ -1,6 +1,6 @@
 module github.com/NVIDIA/fission
 
-go 1.19
+go 1.21
 
 require (
 	github.com/NVIDIA/sortedmap v0.0.0-20221206223250-5aaf17459438

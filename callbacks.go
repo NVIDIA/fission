@@ -796,6 +796,8 @@ func (volume *volumeStruct) doInit(inHeader *InHeader, devFuseFDReadBufPayload [
 		outPayload []byte
 	)
 
+	defer volume.doInitWG.Done()
+
 	if len(devFuseFDReadBufPayload) < InitInMinSize {
 		volume.logger.Printf("Call to doInit() with bad len(devFuseFDReadBufPayload) == %v", len(devFuseFDReadBufPayload))
 		volume.devFuseFDWriter(inHeader, syscall.EINVAL)
