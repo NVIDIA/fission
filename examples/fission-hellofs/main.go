@@ -271,9 +271,10 @@ func main() {
 	}
 
 	fmt.Printf("[DEBUG] runtime.NumCPU(): %v\n", runtime.NumCPU())
-	fmt.Printf("[DEBUG] runtime.GOMAXPROCS() was: %v\n", runtime.GOMAXPROCS(0))
-	_ = runtime.GOMAXPROCS(256)
-	fmt.Printf("[DEBUG] runtime.GOMAXPROCS() now: %v\n", runtime.GOMAXPROCS(0))
+	oldGOMAXPROCS := runtime.GOMAXPROCS(0)
+	fmt.Printf("[DEBUG] runtime.GOMAXPROCS() was: %v\n", oldGOMAXPROCS)
+	newGOMAXPROCS := runtime.GOMAXPROCS(oldGOMAXPROCS + 2)
+	fmt.Printf("[DEBUG] runtime.GOMAXPROCS() now: %v\n", newGOMAXPROCS)
 	tot := int(10000)
 	es := int(0)
 	for i := 1; i <= tot; i++ {
@@ -313,7 +314,7 @@ func main() {
 			globals.logger.Printf("fission.DoUnmount() failed: %v", err)
 			os.Exit(1)
 		}
-		time.Sleep(400 * time.Millisecond)
+		time.Sleep(2000 * time.Millisecond)
 	}
 	fmt.Printf("\n[DEBUG] Of %v, total errors: %v\n\n", tot, es)
 }
