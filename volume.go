@@ -194,7 +194,7 @@ func (volume *volumeStruct) DoMount() (err error) {
 		Args: []string{
 			fusermountProgramPath,
 			"-o", mountOptions,
-			volume.mountpointDirPath,
+			"--", volume.mountpointDirPath,
 		},
 		Env:          append(os.Environ(), "_FUSE_COMMFD=3"),
 		Dir:          "",
@@ -298,7 +298,7 @@ func (volume *volumeStruct) DoUnmount() (err error) {
 		return
 	}
 
-	unmountCmd = exec.Command(fusermountProgramPath, "-u", volume.mountpointDirPath)
+	unmountCmd = exec.Command(fusermountProgramPath, "-u", "-q", "-z", "--", volume.mountpointDirPath)
 	unmountCmdCombinedOutput, err = unmountCmd.CombinedOutput()
 	if nil != err {
 		volume.logger.Printf("DoUnmount() unable to unmount %s (%v): %s", volume.volumeName, err, string(unmountCmdCombinedOutput[:]))
