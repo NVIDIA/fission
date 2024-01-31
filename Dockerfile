@@ -28,7 +28,7 @@ RUN    apt-get update \
                         vim \
                         wget
 
-ARG GolangVersion=1.21.3
+ARG GolangVersion=1.21.6
 ENV GolangBasename="go${GolangVersion}.linux-amd64.tar.gz"
 ENV GolangURL="https://golang.org/dl/${GolangBasename}"
 WORKDIR /tmp
