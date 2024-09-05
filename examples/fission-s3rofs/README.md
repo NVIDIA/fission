@@ -1,4 +1,4 @@
-# fission/examples/fission-swiftfs
+# fission/examples/fission-s3rofs
 
 Example fission (FUSE) File System implementing a read-only File System
 presentation of an S3 Bucket (with optional Prefix). A clean exit is
