@@ -6,7 +6,7 @@ package main
 import (
 	"container/list"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"os"
 	"strconv"
@@ -78,9 +78,9 @@ RetryAfterReAuth:
 		os.Exit(1)
 	}
 
-	_, err = ioutil.ReadAll(httpResponse.Body)
+	_, err = io.ReadAll(httpResponse.Body)
 	if nil != err {
-		fmt.Printf("ioutil.ReadAll(httpResponse.Body) failed: %v\n", err)
+		fmt.Printf("io.ReadAll(httpResponse.Body) failed: %v\n", err)
 		os.Exit(1)
 	}
 	err = httpResponse.Body.Close()
@@ -460,9 +460,9 @@ func (dummy *globalsStruct) DoRead(inHeader *fission.InHeader, readIn *fission.R
 				os.Exit(1)
 			}
 
-			cacheLine.buf, err = ioutil.ReadAll(httpResponse.Body)
+			cacheLine.buf, err = io.ReadAll(httpResponse.Body)
 			if nil != err {
-				fmt.Printf("ioutil.ReadAll(httpResponse.Body) failed: %v\n", err)
+				fmt.Printf("io.ReadAll(httpResponse.Body) failed: %v\n", err)
 				os.Exit(1)
 			}
 			err = httpResponse.Body.Close()
@@ -648,7 +648,7 @@ func (dummy *globalsStruct) DoReadDir(inHeader *fission.InHeader, readDirIn *fis
 			fmt.Printf("globals.rootDirMap.GetByIndex(%d) failed: %v\n", dirEntryIndex, err)
 			os.Exit(1)
 		}
-		if nil != err {
+		if !ok {
 			fmt.Printf("globals.rootDirMap.GetByIndex(%d) returned !ok\n", dirEntryIndex)
 			os.Exit(1)
 		}
@@ -827,7 +827,7 @@ func (dummy *globalsStruct) DoReadDirPlus(inHeader *fission.InHeader, readDirPlu
 			fmt.Printf("globals.rootDirMap.GetByIndex(%d) failed: %v\n", dirEntryIndex, err)
 			os.Exit(1)
 		}
-		if nil != err {
+		if !ok {
 			fmt.Printf("globals.rootDirMap.GetByIndex(%d) returned !ok\n", dirEntryIndex)
 			os.Exit(1)
 		}

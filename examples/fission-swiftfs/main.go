@@ -6,8 +6,9 @@ package main
 import (
 	"container/list"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -18,10 +19,9 @@ import (
 	"syscall"
 	"time"
 
-	"golang.org/x/sys/unix"
-
 	"github.com/NVIDIA/fission"
 	"github.com/NVIDIA/sortedmap"
+	"golang.org/x/sys/unix"
 )
 
 const (
@@ -47,20 +47,9 @@ const (
 
 	attrBlkSize = uint32(512)
 
-	entryValidSec  = uint64(10)
-	entryValidNSec = uint32(0)
-
-	attrValidSec  = uint64(10)
-	attrValidNSec = uint32(0)
-
 	accessROK = syscall.S_IROTH // surprisingly not defined as syscall.R_OK
 	accessWOK = syscall.S_IWOTH // surprisingly not defined as syscall.W_OK
 	accessXOK = syscall.S_IXOTH // surprisingly not defined as syscall.X_OK
-
-	accessMask       = syscall.S_IRWXO // used to mask Owner, Group, or Other RWX bits
-	accessOwnerShift = 6
-	accessGroupShift = 3
-	accessOtherShift = 0
 
 	dirMode  = uint32(syscall.S_IFDIR | syscall.S_IRUSR | syscall.S_IXUSR | syscall.S_IRGRP | syscall.S_IXGRP | syscall.S_IROTH | syscall.S_IXOTH)
 	fileMode = uint32(syscall.S_IFREG | syscall.S_IRUSR | syscall.S_IRGRP | syscall.S_IROTH)
@@ -176,9 +165,9 @@ func main() {
 		os.Exit(0)
 	}
 
-	configFileContent, err = ioutil.ReadFile(os.Args[1])
+	configFileContent, err = os.ReadFile(os.Args[1])
 	if nil != err {
-		fmt.Printf("ioutil.ReadFile(\"%s\") failed: %v\n", os.Args[1], err)
+		fmt.Printf("os.ReadFile(\"%s\") failed: %v\n", os.Args[1], err)
 		os.Exit(1)
 	}
 
@@ -280,9 +269,9 @@ RetryAfterReAuth:
 		os.Exit(1)
 	}
 
-	httpResponseBody, err = ioutil.ReadAll(httpResponse.Body)
+	httpResponseBody, err = io.ReadAll(httpResponse.Body)
 	if nil != err {
-		fmt.Printf("ioutil.ReadAll(httpResponse.Body) failed: %v\n", err)
+		fmt.Printf("io.ReadAll(httpResponse.Body) failed: %v\n", err)
 		os.Exit(1)
 	}
 	err = httpResponse.Body.Close()
@@ -514,9 +503,9 @@ func getAuthToken() {
 		os.Exit(1)
 	}
 
-	_, err = ioutil.ReadAll(httpResponse.Body)
+	_, err = io.ReadAll(httpResponse.Body)
 	if nil != err {
-		fmt.Printf("ioutil.ReadAll(httpResponse.Body) failed: %v\n", err)
+		fmt.Printf("io.ReadAll(httpResponse.Body) failed: %v\n", err)
 		os.Exit(1)
 	}
 	err = httpResponse.Body.Close()
@@ -552,14 +541,6 @@ func goTimeToUnixTime(goTime time.Time) (unixTimeSec uint64, unixTimeNSec uint32
 	return
 }
 
-func cloneByteSlice(inBuf []byte) (outBuf []byte) {
-	outBuf = make([]byte, len(inBuf))
-	if 0 != len(inBuf) {
-		_ = copy(outBuf, inBuf)
-	}
-	return
-}
-
 func (dummy *globalsStruct) DumpKey(key sortedmap.Key) (keyAsString string, err error) {
 	var (
 		ok bool
@@ -569,7 +550,7 @@ func (dummy *globalsStruct) DumpKey(key sortedmap.Key) (keyAsString string, err 
 	if ok {
 		err = nil
 	} else {
-		err = fmt.Errorf("keyAsString, ok = key.(string) returned !ok")
+		err = errors.New("keyAsString, ok = key.(string) returned !ok")
 	}
 
 	return
@@ -586,7 +567,7 @@ func (dummy *globalsStruct) DumpValue(value sortedmap.Value) (valueAsString stri
 		valueAsString = fmt.Sprintf("%#v", valueAsDirEntry)
 		err = nil
 	} else {
-		err = fmt.Errorf("valueAsDirEntry, ok = key.(*dirEntryStruct) returned !ok")
+		err = errors.New("valueAsDirEntry, ok = key.(*dirEntryStruct) returned !ok")
 	}
 
 	return

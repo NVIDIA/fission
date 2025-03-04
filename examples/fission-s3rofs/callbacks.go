@@ -13,11 +13,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/service/s3"
-
 	"github.com/NVIDIA/fission"
 	"github.com/NVIDIA/sortedmap"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
 
 func goTimeToUnixTime(goTime time.Time) (unixTimeSec uint64, unixTimeNSec uint32) {
@@ -341,9 +340,9 @@ func (dummy *globalsStruct) DoRead(inHeader *fission.InHeader, readIn *fission.R
 						fileCacheLine.listElement = globals.fileCacheLRU.PushBack(fileCacheLine)
 						globals.fileCacheMap[fileCacheLine.tag] = fileCacheLine
 						globals.Unlock()
-						err = os.WriteFile(fmt.Sprintf("%s/%08X_%08X", globals.fileCacheDir, fileCacheLine.tag.inodeNumber, fileCacheLine.tag.lineNumber), ramCacheLineContent, 0666)
+						err = os.WriteFile(fmt.Sprintf("%s/%08X_%08X", globals.fileCacheDir, fileCacheLine.tag.inodeNumber, fileCacheLine.tag.lineNumber), ramCacheLineContent, 0600)
 						if err != nil {
-							globals.logger.Fatalf("os.WriteFile(\"%s/%08X_%08X\", ramCacheLineContent, 0666) failed: %v\n", globals.fileCacheDir, fileCacheLine.tag.inodeNumber, fileCacheLine.tag.lineNumber, err)
+							globals.logger.Fatalf("os.WriteFile(\"%s/%08X_%08X\", ramCacheLineContent, 0600) failed: %v\n", globals.fileCacheDir, fileCacheLine.tag.inodeNumber, fileCacheLine.tag.lineNumber, err)
 						}
 						globals.Lock()
 						fileCacheLine.contentReady = true
@@ -378,7 +377,7 @@ func (dummy *globalsStruct) DoRead(inHeader *fission.InHeader, readIn *fission.R
 					globals.Unlock()
 					err = os.Remove(fmt.Sprintf("%s/%08X_%08X", globals.fileCacheDir, fileCacheLine.tag.inodeNumber, fileCacheLine.tag.lineNumber))
 					if err != nil {
-						globals.logger.Fatalf("os.Remove(\"%s/%08X_%08X\") failed: %v", fileCacheLine.tag.inodeNumber, fileCacheLine.tag.lineNumber, err)
+						globals.logger.Fatalf("os.Remove(\"%s/%08X_%08X\") failed: %v", globals.fileCacheDir, fileCacheLine.tag.inodeNumber, fileCacheLine.tag.lineNumber, err)
 					}
 					fileCacheLine.Done()
 				}

@@ -6,17 +6,17 @@ package main
 import (
 	"fmt"
 	"log"
-	"math/rand"
+	"math/rand/v2"
 	"os"
 	"os/signal"
 	"path"
+	"strconv"
 	"syscall"
 	"time"
 
-	"golang.org/x/sys/unix"
-
 	"github.com/NVIDIA/fission"
 	"github.com/NVIDIA/sortedmap"
+	"golang.org/x/sys/unix"
 )
 
 const (
@@ -49,8 +49,8 @@ const (
 	attrValidSec  = uint64(10)
 	attrValidNSec = uint32(0)
 
-	tryLockBackoffMin = time.Duration(time.Second) // time.Duration(100 * time.Microsecond)
-	tryLockBackoffMax = time.Duration(time.Second) // time.Duration(300 * time.Microsecond)
+	tryLockBackoffMin = 100 * time.Microsecond
+	tryLockBackoffMax = 300 * time.Microsecond
 
 	accessROK = syscall.S_IROTH // surprisingly not defined as syscall.R_OK
 	accessWOK = syscall.S_IWOTH // surprisingly not defined as syscall.W_OK
@@ -305,14 +305,9 @@ func (grantedLockSet *grantedLockSetStruct) freeAll(andDelay bool) {
 	}
 
 	if andDelay {
-		tryLockBackoff = tryLockBackoffMin + time.Duration(rand.Int63n(int64(tryLockBackoffMax)-int64(tryLockBackoffMin)+1))
+		tryLockBackoff = tryLockBackoffMin + time.Duration(rand.Uint64N(uint64(tryLockBackoffMax)-uint64(tryLockBackoffMin)+1))
 		time.Sleep(tryLockBackoff)
 	}
-}
-
-func unixTimeToGoTime(unixTimeSec uint64, unixTimeNSec uint32) (goTime time.Time) {
-	goTime = time.Unix(int64(unixTimeSec), int64(unixTimeNSec))
-	return
 }
 
 func goTimeToUnixTime(goTime time.Time) (unixTimeSec uint64, unixTimeNSec uint32) {
@@ -357,7 +352,7 @@ func (dummy *dirEntryMapDummyStruct) DumpKey(key sortedmap.Key) (keyAsString str
 }
 
 func (dummy *dirEntryMapDummyStruct) DumpValue(value sortedmap.Value) (valueAsString string, err error) {
-	valueAsString = fmt.Sprintf("%d", value.(uint64))
+	valueAsString = strconv.FormatUint(value.(uint64), 10)
 	err = nil
 	return
 }

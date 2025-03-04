@@ -9,9 +9,9 @@ the process a SIGHUP, SIGINT, or SIGTERM.
 The program is launched with a single argument specifying the path to a JSON-formatted document with the following structure:
 ```
 {
-  "MountPoint"              : "MountPoint",
-  "ContainerURL"            : "http://127.0.0.1:8080/v1/AUTH_test/C",
-  "AuthURL"                 : "http://127.0.0.1:8080/auth/v1.0",
+  "MountPoint"              : "/mnt",
+  "ContainerURL"            : "http://swift:8080/v1/AUTH_test/mybucket",
+  "AuthURL"                 : "http://swift:8080/auth/v1.0",
   "AuthUser"                : "test:tester",
   "AuthKey"                 : "testing",
   "AuthToken"               : "",
@@ -25,7 +25,7 @@ If Auth{URL|User|Key} are provided (and AuthToken is not), normal OpenStack Swif
 
 Alternatively, you may supply a separately obtained AuthToken (in which case Auth{URL|User|Key} should not be provided).
 
-Finally, if none of Auth{URL|User|Key|Token} are provided, the program will not supply an AuthToken in requests issued to ContainerURL. Thus, not `auth` middleware should be in the Swift Proxy pipeline.
+Finally, if none of Auth{URL|User|Key|Token} are provided, the program will not supply an AuthToken in requests issued to ContainerURL. Thus, no `auth` middleware should be in the Swift Proxy pipeline.
 
 ## Notes
 

@@ -7,8 +7,8 @@ import (
 	"container/list"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"os"
 	"os/signal"
@@ -18,17 +18,15 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/NVIDIA/fission"
+	"github.com/NVIDIA/sortedmap"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/aws/retry"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
-
 	"golang.org/x/sys/unix"
-
-	"github.com/NVIDIA/fission"
-	"github.com/NVIDIA/sortedmap"
 )
 
 const (
@@ -71,11 +69,6 @@ const (
 	accessROK = syscall.S_IROTH // surprisingly not defined as syscall.R_OK
 	accessWOK = syscall.S_IWOTH // surprisingly not defined as syscall.W_OK
 	accessXOK = syscall.S_IXOTH // surprisingly not defined as syscall.X_OK
-
-	accessMask       = syscall.S_IRWXO // used to mask Owner, Group, or Other RWX bits
-	accessOwnerShift = 6
-	accessGroupShift = 3
-	accessOtherShift = 0
 
 	dirMode  = uint32(syscall.S_IFDIR | syscall.S_IRUSR | syscall.S_IXUSR | syscall.S_IRGRP | syscall.S_IXGRP | syscall.S_IROTH | syscall.S_IXOTH)
 	fileMode = uint32(syscall.S_IFREG | syscall.S_IRUSR | syscall.S_IRGRP | syscall.S_IROTH)
@@ -207,9 +200,9 @@ func main() {
 
 	globals.logger = log.New(os.Stdout, "", log.Ldate|log.Ltime)
 
-	configFileContent, err = ioutil.ReadFile(os.Args[1])
+	configFileContent, err = os.ReadFile(os.Args[1])
 	if nil != err {
-		globals.logger.Fatalf("ioutil.ReadFile(\"%s\") failed: %v", os.Args[1], err)
+		globals.logger.Fatalf("os.ReadFile(\"%s\") failed: %v", os.Args[1], err)
 	}
 
 	globals.config = &configStruct{}
@@ -489,7 +482,7 @@ func (inode *inodeStruct) DumpKey(key sortedmap.Key) (keyAsString string, err er
 
 	keyAsString, ok = key.(string)
 	if !ok {
-		err = fmt.Errorf("key.(string) returned !ok")
+		err = errors.New("key.(string) returned !ok")
 		return
 	}
 
@@ -505,7 +498,7 @@ func (inode *inodeStruct) DumpValue(value sortedmap.Value) (valueAsString string
 
 	valueAsUint64, ok = value.(uint64)
 	if !ok {
-		err = fmt.Errorf("value.(uint64) returned !ok")
+		err = errors.New("value.(uint64) returned !ok")
 		return
 	}
 
