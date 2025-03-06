@@ -455,7 +455,7 @@ func main() {
 	signal.Notify(signalChan, unix.SIGINT, unix.SIGTERM, unix.SIGHUP)
 
 	select {
-	case _ = <-signalChan:
+	case <-signalChan:
 		// Normal termination due to one of the above registered signals
 	case err = <-globals.errChan:
 		// Unexpected exit of /dev/fuse read loop since it's before we call DoUnmount()

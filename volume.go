@@ -325,10 +325,8 @@ func (volume *volumeStruct) DoUnmount() (err error) {
 
 func (volume *volumeStruct) scanPipe(name string, pipe io.ReadCloser, lineCount *uint32, wg *sync.WaitGroup) {
 	var (
-		pipeScanner *bufio.Scanner
+		pipeScanner *bufio.Scanner = bufio.NewScanner(pipe)
 	)
-
-	pipeScanner = bufio.NewScanner(pipe)
 
 	for pipeScanner.Scan() {
 		if lineCount != nil {

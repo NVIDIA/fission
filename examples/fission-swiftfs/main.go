@@ -416,7 +416,7 @@ RetryAfterReAuth:
 	signal.Notify(signalChan, unix.SIGINT, unix.SIGTERM, unix.SIGHUP)
 
 	select {
-	case _ = <-signalChan:
+	case <-signalChan:
 		// Normal termination due to one of the above registered signals
 	case err = <-globals.errChan:
 		// Unexpected exit of /dev/fuse read loop since it's before we call DoUnmount()
@@ -533,9 +533,8 @@ func getAuthToken() {
 
 func goTimeToUnixTime(goTime time.Time) (unixTimeSec uint64, unixTimeNSec uint32) {
 	var (
-		unixTime uint64
+		unixTime uint64 = uint64(goTime.UnixNano())
 	)
-	unixTime = uint64(goTime.UnixNano())
 	unixTimeSec = unixTime / 1e9
 	unixTimeNSec = uint32(unixTime - (unixTimeSec * 1e9))
 	return

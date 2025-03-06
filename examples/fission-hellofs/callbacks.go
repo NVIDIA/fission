@@ -54,9 +54,7 @@ func (dummy *globalsStruct) DoLookup(inHeader *fission.InHeader, lookupIn *fissi
 	return
 }
 
-func (dummy *globalsStruct) DoForget(inHeader *fission.InHeader, forgetIn *fission.ForgetIn) {
-	return
-}
+func (dummy *globalsStruct) DoForget(inHeader *fission.InHeader, forgetIn *fission.ForgetIn) {}
 
 func (dummy *globalsStruct) DoGetAttr(inHeader *fission.InHeader, getAttrIn *fission.GetAttrIn) (getAttrOut *fission.GetAttrOut, errno syscall.Errno) {
 	var (
@@ -397,7 +395,6 @@ func (dummy *globalsStruct) DoCreate(inHeader *fission.InHeader, createIn *fissi
 }
 
 func (dummy *globalsStruct) DoInterrupt(inHeader *fission.InHeader, interruptIn *fission.InterruptIn) {
-	return
 }
 
 func (dummy *globalsStruct) DoBMap(inHeader *fission.InHeader, bMapIn *fission.BMapIn) (bMapOut *fission.BMapOut, errno syscall.Errno) {
@@ -416,7 +413,6 @@ func (dummy *globalsStruct) DoPoll(inHeader *fission.InHeader, pollIn *fission.P
 }
 
 func (dummy *globalsStruct) DoBatchForget(inHeader *fission.InHeader, batchForgetIn *fission.BatchForgetIn) {
-	return
 }
 
 func (dummy *globalsStruct) DoFAllocate(inHeader *fission.InHeader, fAllocateIn *fission.FAllocateIn) (errno syscall.Errno) {

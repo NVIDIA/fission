@@ -206,7 +206,7 @@ func main() {
 	signal.Notify(signalChan, unix.SIGINT, unix.SIGTERM, unix.SIGHUP)
 
 	select {
-	case _ = <-signalChan:
+	case <-signalChan:
 		// Normal termination due to one of the above registered signals
 	case err = <-globals.errChan:
 		// Unexpected exit of /dev/fuse read loop since it's before we call DoUnmount()
@@ -245,7 +245,7 @@ func (grantedLockSet *grantedLockSetStruct) get(tryLock *tryLockStruct) {
 		return
 	}
 
-	_ = <-tryLock.lockChan
+	<-tryLock.lockChan
 
 	grantedLockSet.set[tryLock] = 1
 }
@@ -266,7 +266,7 @@ func (grantedLockSet *grantedLockSetStruct) try(tryLock *tryLockStruct) (granted
 	}
 
 	select {
-	case _ = <-tryLock.lockChan:
+	case <-tryLock.lockChan:
 		granted = true
 		grantedLockSet.set[tryLock] = 1
 	default:
@@ -278,10 +278,8 @@ func (grantedLockSet *grantedLockSetStruct) try(tryLock *tryLockStruct) (granted
 
 func (grantedLockSet *grantedLockSetStruct) free(tryLock *tryLockStruct) {
 	var (
-		lockCount uint64
+		lockCount uint64 = grantedLockSet.set[tryLock]
 	)
-
-	lockCount = grantedLockSet.set[tryLock]
 
 	lockCount--
 
@@ -312,9 +310,8 @@ func (grantedLockSet *grantedLockSetStruct) freeAll(andDelay bool) {
 
 func goTimeToUnixTime(goTime time.Time) (unixTimeSec uint64, unixTimeNSec uint32) {
 	var (
-		unixTime uint64
+		unixTime uint64 = uint64(goTime.UnixNano())
 	)
-	unixTime = uint64(goTime.UnixNano())
 	unixTimeSec = unixTime / 1e9
 	unixTimeNSec = uint32(unixTime - (unixTimeSec * 1e9))
 	return

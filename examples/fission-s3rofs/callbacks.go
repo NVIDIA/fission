@@ -21,9 +21,8 @@ import (
 
 func goTimeToUnixTime(goTime time.Time) (unixTimeSec uint64, unixTimeNSec uint32) {
 	var (
-		unixTime uint64
+		unixTime uint64 = uint64(goTime.UnixNano())
 	)
-	unixTime = uint64(goTime.UnixNano())
 	unixTimeSec = unixTime / 1e9
 	unixTimeNSec = uint32(unixTime - (unixTimeSec * 1e9))
 	return
@@ -123,15 +122,13 @@ func (dummy *globalsStruct) DoLookup(inHeader *fission.InHeader, lookupIn *fissi
 }
 
 func (dummy *globalsStruct) DoForget(inHeader *fission.InHeader, forgetIn *fission.ForgetIn) {
-	return
 }
 
 func (dummy *globalsStruct) DoGetAttr(inHeader *fission.InHeader, getAttrIn *fission.GetAttrIn) (getAttrOut *fission.GetAttrOut, errno syscall.Errno) {
 	var (
-		inode *inodeStruct
+		inode *inodeStruct = fetchInode(inHeader.NodeID)
 	)
 
-	inode = fetchInode(inHeader.NodeID)
 	if inode == nil {
 		errno = syscall.ENOENT
 		return
@@ -196,10 +193,9 @@ func (dummy *globalsStruct) DoLink(inHeader *fission.InHeader, linkIn *fission.L
 
 func (dummy *globalsStruct) DoOpen(inHeader *fission.InHeader, openIn *fission.OpenIn) (openOut *fission.OpenOut, errno syscall.Errno) {
 	var (
-		fileInode *inodeStruct
+		fileInode *inodeStruct = fetchInode(inHeader.NodeID)
 	)
 
-	fileInode = fetchInode(inHeader.NodeID)
 	if fileInode == nil {
 		errno = syscall.ENOENT
 		return
@@ -507,10 +503,9 @@ func (dummy *globalsStruct) DoStatFS(inHeader *fission.InHeader) (statFSOut *fis
 
 func (dummy *globalsStruct) DoRelease(inHeader *fission.InHeader, releaseIn *fission.ReleaseIn) (errno syscall.Errno) {
 	var (
-		fileInode *inodeStruct
+		fileInode *inodeStruct = fetchInode(inHeader.NodeID)
 	)
 
-	fileInode = fetchInode(inHeader.NodeID)
 	if fileInode == nil {
 		errno = syscall.ENOENT
 		return
@@ -577,10 +572,9 @@ func (dummy *globalsStruct) DoInit(inHeader *fission.InHeader, initIn *fission.I
 
 func (dummy *globalsStruct) DoOpenDir(inHeader *fission.InHeader, openDirIn *fission.OpenDirIn) (openDirOut *fission.OpenDirOut, errno syscall.Errno) {
 	var (
-		dirInode *inodeStruct
+		dirInode *inodeStruct = fetchInode(inHeader.NodeID)
 	)
 
-	dirInode = fetchInode(inHeader.NodeID)
 	if dirInode == nil {
 		errno = syscall.ENOENT
 		return
@@ -707,10 +701,9 @@ func (dummy *globalsStruct) DoReadDir(inHeader *fission.InHeader, readDirIn *fis
 
 func (dummy *globalsStruct) DoReleaseDir(inHeader *fission.InHeader, releaseDirIn *fission.ReleaseDirIn) (errno syscall.Errno) {
 	var (
-		dirInode *inodeStruct
+		dirInode *inodeStruct = fetchInode(inHeader.NodeID)
 	)
 
-	dirInode = fetchInode(inHeader.NodeID)
 	if dirInode == nil {
 		errno = syscall.ENOENT
 		return
@@ -747,10 +740,9 @@ func (dummy *globalsStruct) DoSetLKW(inHeader *fission.InHeader, setLKWIn *fissi
 
 func (dummy *globalsStruct) DoAccess(inHeader *fission.InHeader, accessIn *fission.AccessIn) (errno syscall.Errno) {
 	var (
-		inode *inodeStruct
+		inode *inodeStruct = fetchInode(inHeader.NodeID)
 	)
 
-	inode = fetchInode(inHeader.NodeID)
 	if inode == nil {
 		errno = syscall.ENOENT
 		return
@@ -771,7 +763,6 @@ func (dummy *globalsStruct) DoCreate(inHeader *fission.InHeader, createIn *fissi
 }
 
 func (dummy *globalsStruct) DoInterrupt(inHeader *fission.InHeader, interruptIn *fission.InterruptIn) {
-	return
 }
 
 func (dummy *globalsStruct) DoBMap(inHeader *fission.InHeader, bMapIn *fission.BMapIn) (bMapOut *fission.BMapOut, errno syscall.Errno) {
@@ -790,7 +781,6 @@ func (dummy *globalsStruct) DoPoll(inHeader *fission.InHeader, pollIn *fission.P
 }
 
 func (dummy *globalsStruct) DoBatchForget(inHeader *fission.InHeader, batchForgetIn *fission.BatchForgetIn) {
-	return
 }
 
 func (dummy *globalsStruct) DoFAllocate(inHeader *fission.InHeader, fAllocateIn *fission.FAllocateIn) (errno syscall.Errno) {
