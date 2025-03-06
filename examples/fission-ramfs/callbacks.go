@@ -1594,7 +1594,7 @@ Restart:
 
 	totalSize = 0
 
-	for xattrIndex = 0; xattrIndex < xattrCount; xattrIndex++ {
+	for xattrIndex = range xattrCount {
 		xattrNameAsKey, _, ok, err = inode.xattrMap.GetByIndex(xattrIndex)
 		if err != nil {
 			globals.logger.Printf("func DoGetXAttr(NodeID==%v) failed on .xattrMap.GetByIndex(%d): %v", inHeader.NodeID, xattrIndex, err)
@@ -1838,7 +1838,7 @@ Restart:
 		DirEnt: make([]fission.DirEnt, dirEntCount),
 	}
 
-	for dirEntIndex = 0; dirEntIndex < dirEntCount; dirEntIndex++ {
+	for dirEntIndex = range dirEntCount {
 		dirEntNameAsKey, dirEntInoAsValue, ok, err = dirInode.dirEntryMap.GetByIndex(dirEntIndex)
 		if err != nil {
 			globals.logger.Printf("func DoReadDir(NodeID==%v) failed on .dirEntryMap.GetByIndex(): %v", inHeader.NodeID, err)
@@ -2354,7 +2354,7 @@ Restart:
 		DirEntPlus: make([]fission.DirEntPlus, dirEntPlusCount),
 	}
 
-	for dirEntPlusIndex = 0; dirEntPlusIndex < dirEntPlusCount; dirEntPlusIndex++ {
+	for dirEntPlusIndex = range dirEntPlusCount {
 		dirEntNameAsKey, dirEntInoAsValue, ok, err = dirInode.dirEntryMap.GetByIndex(dirEntPlusIndex)
 		if err != nil {
 			globals.logger.Printf("func DoReadDirPlus(NodeID==%v) failed on .dirEntryMap.GetByIndex(): %v", inHeader.NodeID, err)

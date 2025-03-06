@@ -1074,7 +1074,7 @@ func (volume *volumeStruct) doReadDir(inHeader *InHeader, devFuseFDReadBufPayloa
 
 	outPayloadOffset = 0
 
-	for dirEntIndex = 0; dirEntIndex < len(readDirOut.DirEnt); dirEntIndex++ {
+	for dirEntIndex = range len(readDirOut.DirEnt) {
 		dirEnt = &readDirOut.DirEnt[dirEntIndex]
 
 		nameLenAligned = (uint32(len(dirEnt.Name)) + (DirEntAlignment - 1)) & ^uint32(DirEntAlignment-1)
@@ -1463,7 +1463,7 @@ func (volume *volumeStruct) doBatchForget(inHeader *InHeader, devFuseFDReadBufPa
 
 	batchForgetInOffset = BatchForgetInFixedPortionSize
 
-	for batchForgetInForgetIndex = 0; batchForgetInForgetIndex < batchForgetIn.Count; batchForgetInForgetIndex++ {
+	for batchForgetInForgetIndex = range batchForgetIn.Count {
 		batchForgetIn.Forget[batchForgetInForgetIndex] = ForgetOne{
 			NodeID:  *(*uint64)(unsafe.Pointer(&devFuseFDReadBufPayload[batchForgetInOffset+0])),
 			NLookup: *(*uint64)(unsafe.Pointer(&devFuseFDReadBufPayload[batchForgetInOffset+8])),
@@ -1538,7 +1538,7 @@ func (volume *volumeStruct) doReadDirPlus(inHeader *InHeader, devFuseFDReadBufPa
 
 	outPayloadOffset = 0
 
-	for dirEntPlusIndex = 0; dirEntPlusIndex < len(readDirPlusOut.DirEntPlus); dirEntPlusIndex++ {
+	for dirEntPlusIndex = range len(readDirPlusOut.DirEntPlus) {
 		dirEntPlus = &readDirPlusOut.DirEntPlus[dirEntPlusIndex]
 
 		nameLenAligned = (uint32(len(dirEntPlus.Name)) + (DirEntAlignment - 1)) & ^uint32(DirEntAlignment-1)
