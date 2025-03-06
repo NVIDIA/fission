@@ -79,7 +79,8 @@ func newVolume(volumeName, mountpointDirPath, fuseSubtype string, maxRead, maxWr
 
 	volume.devFuseFDReadPool = sync.Pool{
 		New: func() interface{} {
-			return make([]byte, volume.devFuseFDReadSize) // len == cap
+			buf := make([]byte, volume.devFuseFDReadSize) // len == cap
+			return &buf
 		},
 	}
 
@@ -357,25 +358,27 @@ func (volume *volumeStruct) awaitScanPipe(wg *sync.WaitGroup, lineCount *uint32,
 	}
 }
 
-func (volume *volumeStruct) devFuseFDReadPoolGet() (devFuseFDReadBuf []byte) {
-	devFuseFDReadBuf = volume.devFuseFDReadPool.Get().([]byte)
+func (volume *volumeStruct) devFuseFDReadPoolGet() (devFuseFDReadBufPtr *[]byte) {
+	devFuseFDReadBufPtr = volume.devFuseFDReadPool.Get().(*[]byte)
 	return
 }
 
-func (volume *volumeStruct) devFuseFDReadPoolPut(devFuseFDReadBuf []byte) {
-	devFuseFDReadBuf = devFuseFDReadBuf[:cap(devFuseFDReadBuf)] // len == cap
-	volume.devFuseFDReadPool.Put(devFuseFDReadBuf)
+func (volume *volumeStruct) devFuseFDReadPoolPut(devFuseFDReadBufPtr *[]byte) {
+	*devFuseFDReadBufPtr = (*devFuseFDReadBufPtr)[:cap(*devFuseFDReadBufPtr)] // len == cap
+	volume.devFuseFDReadPool.Put(devFuseFDReadBufPtr)
 }
 
 func (volume *volumeStruct) devFuseFDReader() {
 	var (
-		bytesRead        int
-		devFuseFDReadBuf []byte
-		err              error
+		bytesRead           int
+		devFuseFDReadBuf    []byte
+		devFuseFDReadBufPtr *[]byte
+		err                 error
 	)
 
 	for {
-		devFuseFDReadBuf = volume.devFuseFDReadPoolGet()
+		devFuseFDReadBufPtr = volume.devFuseFDReadPoolGet()
+		devFuseFDReadBuf = *devFuseFDReadBufPtr
 
 	RetrySyscallRead:
 		bytesRead, err = syscall.Read(volume.devFuseFD, devFuseFDReadBuf)
@@ -388,7 +391,8 @@ func (volume *volumeStruct) devFuseFDReader() {
 
 			// Now that we are not retrying syscall.Read(), discard devFuseFDReadBuf
 
-			volume.devFuseFDReadPoolPut(devFuseFDReadBuf)
+			*devFuseFDReadBufPtr = devFuseFDReadBuf
+			volume.devFuseFDReadPoolPut(devFuseFDReadBufPtr)
 
 			if err.Error() == "operation not permitted" {
 				// Special case... simply retry the Read
@@ -416,23 +420,26 @@ func (volume *volumeStruct) devFuseFDReader() {
 		}
 
 		devFuseFDReadBuf = devFuseFDReadBuf[:bytesRead]
+		*devFuseFDReadBufPtr = devFuseFDReadBuf
 
 		// Dispatch goroutine to process devFuseFDReadBuf
 
 		volume.callbacksWG.Add(1)
-		go volume.processDevFuseFDReadBuf(devFuseFDReadBuf)
+		go volume.processDevFuseFDReadBuf(devFuseFDReadBufPtr)
 	}
 }
 
-func (volume *volumeStruct) processDevFuseFDReadBuf(devFuseFDReadBuf []byte) {
+func (volume *volumeStruct) processDevFuseFDReadBuf(devFuseFDReadBufPtr *[]byte) {
 	var (
-		inHeader *InHeader
+		devFuseFDReadBuf = *devFuseFDReadBufPtr
+		inHeader         *InHeader
 	)
 
 	if len(devFuseFDReadBuf) < InHeaderSize {
 		// All we can do is just drop it
 		volume.logger.Printf("Read malformed message from /dev/fuse")
-		volume.devFuseFDReadPoolPut(devFuseFDReadBuf)
+		*devFuseFDReadBufPtr = devFuseFDReadBuf
+		volume.devFuseFDReadPoolPut(devFuseFDReadBufPtr)
 		volume.callbacksWG.Done()
 		return
 	}
@@ -539,7 +546,8 @@ func (volume *volumeStruct) processDevFuseFDReadBuf(devFuseFDReadBuf []byte) {
 		volume.devFuseFDWriter(inHeader, syscall.ENOSYS)
 	}
 
-	volume.devFuseFDReadPoolPut(devFuseFDReadBuf)
+	*devFuseFDReadBufPtr = devFuseFDReadBuf
+	volume.devFuseFDReadPoolPut(devFuseFDReadBufPtr)
 	volume.callbacksWG.Done()
 }
 

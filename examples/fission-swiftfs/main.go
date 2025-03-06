@@ -224,8 +224,7 @@ func main() {
 	customTransport = &http.Transport{ // Up-to-date as of Golang 1.11
 		Proxy:                  defaultTransport.Proxy,
 		DialContext:            defaultTransport.DialContext,
-		Dial:                   defaultTransport.Dial,
-		DialTLS:                defaultTransport.DialTLS,
+		DialTLSContext:         defaultTransport.DialTLSContext,
 		TLSClientConfig:        defaultTransport.TLSClientConfig,
 		TLSHandshakeTimeout:    globals.swiftTimeout,
 		DisableKeepAlives:      false,

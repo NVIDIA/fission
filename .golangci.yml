@@ -33,7 +33,7 @@ linters:
     - protogetter
     - reassign
     - revive
-    # - staticcheck
+    - staticcheck
     - testpackage
     - typecheck
     - unconvert

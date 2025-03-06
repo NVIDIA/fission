@@ -318,7 +318,7 @@ func (*globalsStruct) DoRead(inHeader *fission.InHeader, readIn *fission.ReadIn)
 					delete(globals.ramCacheMap, ramCacheLine.tag)
 					globals.Unlock()
 				} else {
-					fileCacheLine, ok = globals.fileCacheMap[ramCacheLine.tag]
+					_, ok = globals.fileCacheMap[ramCacheLine.tag]
 					if ok {
 						ramCacheLine.content = nil
 						_ = globals.ramCacheLRU.Remove(ramCacheLine.listElement)
