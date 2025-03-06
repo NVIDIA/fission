@@ -1,4 +1,4 @@
-// Copyright (c) 2015-2021, NVIDIA CORPORATION.
+// Copyright (c) 2015-2025, NVIDIA CORPORATION.
 // SPDX-License-Identifier: Apache-2.0
 
 package main
@@ -116,7 +116,7 @@ func main() {
 		unixTimeNowSec  uint64
 	)
 
-	if 2 != len(os.Args) {
+	if len(os.Args) != 2 {
 		fmt.Printf("Usage: %s <mount_point>\n", os.Args[0])
 		os.Exit(0)
 	}
@@ -164,7 +164,7 @@ func main() {
 	fixAttrSizes(&rootInode.attr)
 
 	ok, err = rootInode.dirEntryMap.Put([]byte("."), uint64(1))
-	if nil != err {
+	if err != nil {
 		globals.logger.Printf("rootInode.dirEntryMap.Put([]byte(\".\"), uint64(1)) failed: %v", err)
 		os.Exit(1)
 	}
@@ -173,7 +173,7 @@ func main() {
 		os.Exit(1)
 	}
 	ok, err = rootInode.dirEntryMap.Put([]byte(".."), uint64(1))
-	if nil != err {
+	if err != nil {
 		globals.logger.Printf("rootInode.dirEntryMap.Put([]byte(\"..\"), uint64(1)) failed: %v", err)
 		os.Exit(1)
 	}
@@ -197,7 +197,7 @@ func main() {
 	globals.volume = fission.NewVolume(globals.volumeName, globals.mountPoint, fuseSubtype, maxRead, maxWrite, false, false, &globals, globals.logger, globals.errChan)
 
 	err = globals.volume.DoMount()
-	if nil != err {
+	if err != nil {
 		globals.logger.Printf("fission.DoMount() failed: %v", err)
 		os.Exit(1)
 	}
@@ -214,7 +214,7 @@ func main() {
 	}
 
 	err = globals.volume.DoUnmount()
-	if nil != err {
+	if err != nil {
 		globals.logger.Printf("fission.DoUnmount() failed: %v", err)
 		os.Exit(1)
 	}
@@ -285,7 +285,7 @@ func (grantedLockSet *grantedLockSetStruct) free(tryLock *tryLockStruct) {
 
 	lockCount--
 
-	if 0 == lockCount {
+	if lockCount == 0 {
 		tryLock.lockChan <- struct{}{}
 		delete(grantedLockSet.set, tryLock)
 	} else {
@@ -327,14 +327,14 @@ func unixTimeNow() (unixTimeNowSec uint64, unixTimeNowNSec uint32) {
 
 func cloneByteSlice(inBuf []byte) (outBuf []byte) {
 	outBuf = make([]byte, len(inBuf))
-	if 0 != len(inBuf) {
+	if len(inBuf) != 0 {
 		_ = copy(outBuf, inBuf)
 	}
 	return
 }
 
 func (dummy *xattrMapDummyStruct) DumpKey(key sortedmap.Key) (keyAsString string, err error) {
-	keyAsString = string(key.([]byte)[:])
+	keyAsString = string(key.([]byte))
 	err = nil
 	return
 }
@@ -346,7 +346,7 @@ func (dummy *xattrMapDummyStruct) DumpValue(value sortedmap.Value) (valueAsStrin
 }
 
 func (dummy *dirEntryMapDummyStruct) DumpKey(key sortedmap.Key) (keyAsString string, err error) {
-	keyAsString = string(key.([]byte)[:])
+	keyAsString = string(key.([]byte))
 	err = nil
 	return
 }

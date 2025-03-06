@@ -1,4 +1,4 @@
-// Copyright (c) 2015-2023, NVIDIA CORPORATION.
+// Copyright (c) 2015-2025, NVIDIA CORPORATION.
 // SPDX-License-Identifier: Apache-2.0
 
 package main
@@ -39,7 +39,7 @@ func (fileInode *fileInodeStruct) ensureAttrInCache() {
 
 	fileInode.RLock()
 
-	if nil != fileInode.cachedAttr {
+	if fileInode.cachedAttr != nil {
 		fileInode.RUnlock()
 		return
 	}
@@ -48,7 +48,7 @@ func (fileInode *fileInodeStruct) ensureAttrInCache() {
 
 	fileInode.Lock()
 
-	if nil != fileInode.cachedAttr {
+	if fileInode.cachedAttr != nil {
 		fileInode.Unlock()
 		return
 	}
@@ -59,8 +59,8 @@ func (fileInode *fileInodeStruct) ensureAttrInCache() {
 
 RetryAfterReAuth:
 
-	httpRequest, err = http.NewRequest("HEAD", objectURL, nil)
-	if nil != err {
+	httpRequest, err = http.NewRequest("HEAD", objectURL, http.NoBody)
+	if err != nil {
 		fmt.Printf("http.NewRequest(\"HEAD\", \"%s\", nil) failed: %v\n", objectURL, err)
 		os.Exit(1)
 	}
@@ -68,23 +68,23 @@ RetryAfterReAuth:
 	httpRequest.Header["User-Agent"] = []string{httpUserAgent}
 
 	authToken = fetchAuthToken()
-	if "" != authToken {
+	if authToken != "" {
 		httpRequest.Header["X-Auth-Token"] = []string{authToken}
 	}
 
 	httpResponse, err = globals.httpClient.Do(httpRequest)
-	if nil != err {
+	if err != nil {
 		fmt.Printf("globals.httpClient.Do(HEAD %s) failed: %v\n", objectURL, err)
 		os.Exit(1)
 	}
 
 	_, err = io.ReadAll(httpResponse.Body)
-	if nil != err {
+	if err != nil {
 		fmt.Printf("io.ReadAll(httpResponse.Body) failed: %v\n", err)
 		os.Exit(1)
 	}
 	err = httpResponse.Body.Close()
-	if nil != err {
+	if err != nil {
 		fmt.Printf("httpResponse.Body.Close() failed: %v\n", err)
 		os.Exit(1)
 	}
@@ -108,13 +108,13 @@ RetryAfterReAuth:
 	}
 
 	contentLength, err = strconv.ParseUint(httpResponse.Header.Get("Content-Length"), 10, 64)
-	if nil != err {
+	if err != nil {
 		fmt.Printf("strconv.ParseUint(httpResponse.Header.Get(\"Content-Length\"), 10, 64) failed: %v\n", err)
 		os.Exit(1)
 	}
 
 	mTime, err = time.Parse(time.RFC1123, httpResponse.Header.Get("Last-Modified"))
-	if nil == err {
+	if err == nil {
 		mTimeSec, mTimeNSec = goTimeToUnixTime(mTime)
 	} else {
 		mTimeSec, mTimeNSec = goTimeToUnixTime(globals.startTime)
@@ -153,14 +153,14 @@ func (dummy *globalsStruct) DoLookup(inHeader *fission.InHeader, lookupIn *fissi
 		ok              bool
 	)
 
-	if 1 != inHeader.NodeID {
+	if inHeader.NodeID != 1 {
 		errno = syscall.ENOENT
 		return
 	}
 
-	dirEntryAsValue, ok, err = globals.rootDirMap.GetByKey(string(lookupIn.Name[:]))
-	if nil != err {
-		fmt.Printf("globals.rootDirMap.GetByKey(\"%s\") failed: %v\n", string(lookupIn.Name[:]), err)
+	dirEntryAsValue, ok, err = globals.rootDirMap.GetByKey(string(lookupIn.Name))
+	if err != nil {
+		fmt.Printf("globals.rootDirMap.GetByKey(\"%s\") failed: %v\n", string(lookupIn.Name), err)
 		os.Exit(1)
 	}
 	if !ok {
@@ -224,7 +224,7 @@ func (dummy *globalsStruct) DoGetAttr(inHeader *fission.InHeader, getAttrIn *fis
 		ok        bool
 	)
 
-	if 1 == inHeader.NodeID {
+	if inHeader.NodeID == 1 {
 		inodeAttr = globals.rootDirAttr
 	} else {
 		fileInode, ok = globals.fileInodeMap[inHeader.NodeID]
@@ -319,7 +319,7 @@ func (dummy *globalsStruct) DoOpen(inHeader *fission.InHeader, openIn *fission.O
 		ok        bool
 	)
 
-	if 1 == inHeader.NodeID {
+	if inHeader.NodeID == 1 {
 		errno = syscall.EINVAL
 		return
 	}
@@ -432,8 +432,8 @@ func (dummy *globalsStruct) DoRead(inHeader *fission.InHeader, readIn *fission.R
 
 		RetryAfterReAuth:
 
-			httpRequest, err = http.NewRequest("GET", objectURL, nil)
-			if nil != err {
+			httpRequest, err = http.NewRequest("GET", objectURL, http.NoBody)
+			if err != nil {
 				fmt.Printf("http.NewRequest(\"GET\", \"%s\", nil) failed: %v\n", objectURL, err)
 				os.Exit(1)
 			}
@@ -441,7 +441,7 @@ func (dummy *globalsStruct) DoRead(inHeader *fission.InHeader, readIn *fission.R
 			httpRequest.Header["User-Agent"] = []string{httpUserAgent}
 
 			authToken = fetchAuthToken()
-			if "" != authToken {
+			if authToken != "" {
 				httpRequest.Header["X-Auth-Token"] = []string{authToken}
 			}
 
@@ -455,18 +455,18 @@ func (dummy *globalsStruct) DoRead(inHeader *fission.InHeader, readIn *fission.R
 			httpRequest.Header["Range"] = []string{fmt.Sprintf("bytes=%d-%d", objectOffsetStart, objectOffsetLimit-1)}
 
 			httpResponse, err = globals.httpClient.Do(httpRequest)
-			if nil != err {
+			if err != nil {
 				fmt.Printf("globals.httpClient.Do(GET %s) failed: %v\n", objectURL, err)
 				os.Exit(1)
 			}
 
 			cacheLine.buf, err = io.ReadAll(httpResponse.Body)
-			if nil != err {
+			if err != nil {
 				fmt.Printf("io.ReadAll(httpResponse.Body) failed: %v\n", err)
 				os.Exit(1)
 			}
 			err = httpResponse.Body.Close()
-			if nil != err {
+			if err != nil {
 				fmt.Printf("httpResponse.Body.Close() failed: %v\n", err)
 				os.Exit(1)
 			}
@@ -595,7 +595,7 @@ func (dummy *globalsStruct) DoInit(inHeader *fission.InHeader, initIn *fission.I
 }
 
 func (dummy *globalsStruct) DoOpenDir(inHeader *fission.InHeader, openDirIn *fission.OpenDirIn) (openDirOut *fission.OpenDirOut, errno syscall.Errno) {
-	if 1 != inHeader.NodeID {
+	if inHeader.NodeID != 1 {
 		errno = syscall.ENOENT
 		return
 	}
@@ -625,13 +625,13 @@ func (dummy *globalsStruct) DoReadDir(inHeader *fission.InHeader, readDirIn *fis
 		totalSize               uint32
 	)
 
-	if 1 != inHeader.NodeID {
+	if inHeader.NodeID != 1 {
 		errno = syscall.ENOENT
 		return
 	}
 
 	numDirEntries, err = globals.rootDirMap.Len()
-	if nil != err {
+	if err != nil {
 		fmt.Printf("globals.rootDirMap.Len() failed: %v\n", err)
 		os.Exit(1)
 	}
@@ -644,7 +644,7 @@ func (dummy *globalsStruct) DoReadDir(inHeader *fission.InHeader, readDirIn *fis
 
 	for dirEntryIndex = int(readDirIn.Offset); dirEntryIndex < numDirEntries; dirEntryIndex++ {
 		_, dirEntryAsValue, ok, err = globals.rootDirMap.GetByIndex(dirEntryIndex)
-		if nil != err {
+		if err != nil {
 			fmt.Printf("globals.rootDirMap.GetByIndex(%d) failed: %v\n", dirEntryIndex, err)
 			os.Exit(1)
 		}
@@ -686,7 +686,7 @@ func (dummy *globalsStruct) DoReadDir(inHeader *fission.InHeader, readDirIn *fis
 		totalSize += dirEntSize
 	}
 
-	if 0 == len(readDirOut.DirEnt) {
+	if len(readDirOut.DirEnt) == 0 {
 		errno = syscall.ENOENT
 	} else {
 		errno = 0
@@ -696,7 +696,7 @@ func (dummy *globalsStruct) DoReadDir(inHeader *fission.InHeader, readDirIn *fis
 }
 
 func (dummy *globalsStruct) DoReleaseDir(inHeader *fission.InHeader, releaseDirIn *fission.ReleaseDirIn) (errno syscall.Errno) {
-	if 1 != inHeader.NodeID {
+	if inHeader.NodeID != 1 {
 		errno = syscall.EINVAL
 		return
 	}
@@ -731,17 +731,17 @@ func (dummy *globalsStruct) DoAccess(inHeader *fission.InHeader, accessIn *fissi
 		ok        bool
 	)
 
-	if 0 != (accessIn.Mask & accessWOK) {
+	if (accessIn.Mask & accessWOK) != 0 {
 		errno = syscall.EACCES
 	} else {
-		if 1 == inHeader.NodeID {
+		if inHeader.NodeID == 1 {
 			errno = 0
 		} else {
 			fileInode, ok = globals.fileInodeMap[inHeader.NodeID]
 			if ok {
 				fileInode.ensureAttrInCache()
 
-				if 0 != (accessIn.Mask & accessXOK) {
+				if (accessIn.Mask & accessXOK) != 0 {
 					errno = syscall.EACCES
 				} else {
 					errno = 0
@@ -804,13 +804,13 @@ func (dummy *globalsStruct) DoReadDirPlus(inHeader *fission.InHeader, readDirPlu
 		totalSize               uint32
 	)
 
-	if 1 != inHeader.NodeID {
+	if inHeader.NodeID != 1 {
 		errno = syscall.ENOENT
 		return
 	}
 
 	numDirEntries, err = globals.rootDirMap.Len()
-	if nil != err {
+	if err != nil {
 		fmt.Printf("globals.rootDirMap.Len() failed: %v\n", err)
 		os.Exit(1)
 	}
@@ -823,7 +823,7 @@ func (dummy *globalsStruct) DoReadDirPlus(inHeader *fission.InHeader, readDirPlu
 
 	for dirEntryIndex = int(readDirPlusIn.Offset); dirEntryIndex < numDirEntries; dirEntryIndex++ {
 		_, dirEntryAsValue, ok, err = globals.rootDirMap.GetByIndex(dirEntryIndex)
-		if nil != err {
+		if err != nil {
 			fmt.Printf("globals.rootDirMap.GetByIndex(%d) failed: %v\n", dirEntryIndex, err)
 			os.Exit(1)
 		}
@@ -944,7 +944,7 @@ func (dummy *globalsStruct) DoReadDirPlus(inHeader *fission.InHeader, readDirPlu
 
 	asyncFillAttrWG.Wait()
 
-	if 0 == len(readDirPlusOut.DirEntPlus) {
+	if len(readDirPlusOut.DirEntPlus) == 0 {
 		errno = syscall.ENOENT
 	} else {
 		errno = 0

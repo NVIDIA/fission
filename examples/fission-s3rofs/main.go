@@ -1,4 +1,4 @@
-// Copyright (c) 2023, NVIDIA CORPORATION.
+// Copyright (c) 2023-2025, NVIDIA CORPORATION.
 // SPDX-License-Identifier: Apache-2.0
 
 package main
@@ -201,14 +201,14 @@ func main() {
 	globals.logger = log.New(os.Stdout, "", log.Ldate|log.Ltime)
 
 	configFileContent, err = os.ReadFile(os.Args[1])
-	if nil != err {
+	if err != nil {
 		globals.logger.Fatalf("os.ReadFile(\"%s\") failed: %v", os.Args[1], err)
 	}
 
 	globals.config = &configStruct{}
 
 	err = json.Unmarshal(configFileContent, globals.config)
-	if nil != err {
+	if err != nil {
 		globals.logger.Fatalf("json.Unmarshal(configFileContent, config) failed: %v", err)
 	}
 
@@ -252,7 +252,7 @@ func main() {
 			globals.logger.Printf("json.Marshal(globals.config) failed: %v", err)
 		}
 
-		globals.logger.Printf("globals.config: %s", string(configAsJSON[:]))
+		globals.logger.Printf("globals.config: %s", string(configAsJSON))
 	}
 
 	globals.inodeTable = make([]*inodeStruct, 0)
@@ -463,7 +463,7 @@ func main() {
 	}
 
 	err = globals.volume.DoUnmount()
-	if nil != err {
+	if err != nil {
 		globals.logger.Fatalf("fission.DoUnmount() failed: %v", err)
 	}
 

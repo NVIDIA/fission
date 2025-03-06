@@ -1,4 +1,4 @@
-// Copyright (c) 2015-2023, NVIDIA CORPORATION.
+// Copyright (c) 2015-2025, NVIDIA CORPORATION.
 // SPDX-License-Identifier: Apache-2.0
 
 package main
@@ -16,7 +16,7 @@ func (dummy *globalsStruct) DoLookup(inHeader *fission.InHeader, lookupIn *fissi
 		return
 	}
 
-	if 0 != bytes.Compare(helloFileName, lookupIn.Name) {
+	if !bytes.Equal(helloFileName, lookupIn.Name) {
 		errno = syscall.ENOENT
 		return
 	}
@@ -63,11 +63,12 @@ func (dummy *globalsStruct) DoGetAttr(inHeader *fission.InHeader, getAttrIn *fis
 		inodeAttr *fission.Attr
 	)
 
-	if rootInodeIno == inHeader.NodeID {
+	switch inHeader.NodeID {
+	case rootInodeIno:
 		inodeAttr = globals.rootInodeAttr
-	} else if helloInodeIno == inHeader.NodeID {
+	case helloInodeIno:
 		inodeAttr = globals.helloInodeAttr
-	} else {
+	default:
 		errno = syscall.ENOENT
 		return
 	}
@@ -370,18 +371,19 @@ func (dummy *globalsStruct) DoSetLKW(inHeader *fission.InHeader, setLKWIn *fissi
 }
 
 func (dummy *globalsStruct) DoAccess(inHeader *fission.InHeader, accessIn *fission.AccessIn) (errno syscall.Errno) {
-	if 0 != (accessIn.Mask & accessWOK) {
+	if (accessIn.Mask & accessWOK) != 0 {
 		errno = syscall.EACCES
 	} else {
-		if rootInodeIno == inHeader.NodeID {
+		switch inHeader.NodeID {
+		case rootInodeIno:
 			errno = 0
-		} else if helloInodeIno == inHeader.NodeID {
-			if 0 != (accessIn.Mask & accessXOK) {
+		case helloInodeIno:
+			if (accessIn.Mask & accessXOK) != 0 {
 				errno = syscall.EACCES
 			} else {
 				errno = 0
 			}
-		} else {
+		default:
 			errno = syscall.ENOENT
 		}
 	}

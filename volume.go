@@ -1,4 +1,4 @@
-// Copyright (c) 2015-2021, NVIDIA CORPORATION.
+// Copyright (c) 2015-2025, NVIDIA CORPORATION.
 // SPDX-License-Identifier: Apache-2.0
 
 package fission
@@ -10,7 +10,6 @@ import (
 	"log"
 	"os"
 	"os/exec"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -49,7 +48,7 @@ const (
 	devFuseFDReadSizeMin = 2 * 4096
 )
 
-func newVolume(volumeName string, mountpointDirPath string, fuseSubtype string, maxRead uint32, maxWrite uint32, defaultPermissions bool, allowOther bool, callbacks Callbacks, logger *log.Logger, errChan chan error) (volume *volumeStruct) {
+func newVolume(volumeName, mountpointDirPath, fuseSubtype string, maxRead, maxWrite uint32, defaultPermissions, allowOther bool, callbacks Callbacks, logger *log.Logger, errChan chan error) (volume *volumeStruct) {
 	var (
 		devFuseFDReadSize uint32
 	)
@@ -118,7 +117,7 @@ func (volume *volumeStruct) DoMount() (err error) {
 	)
 
 	fusermountProgramPath, err = exec.LookPath("fusermount")
-	if nil != err {
+	if err != nil {
 		volume.logger.Printf("Volume %s DoMount() unable to find program `fusermount`: %v", volume.volumeName, err)
 		return
 	}
@@ -127,7 +126,7 @@ func (volume *volumeStruct) DoMount() (err error) {
 	_, _ = unmountCmd.CombinedOutput()
 
 	fusermountSocketPair, err = syscall.Socketpair(syscall.AF_UNIX, syscall.SOCK_SEQPACKET, 0)
-	if nil != err {
+	if err != nil {
 		volume.logger.Printf("Volume %s DoMount() unable to create socketpairFDs: %v", volume.volumeName, err)
 		return
 	}
@@ -144,13 +143,13 @@ func (volume *volumeStruct) DoMount() (err error) {
 
 		if !syscallRecvmsgAborted {
 			localErr = fusermountChildWriteFile.Close()
-			if nil != localErr {
+			if localErr != nil {
 				volume.logger.Printf("Volume %s DoMount() unable to close fusermountChildWriteFile: %v", volume.volumeName, err)
 			}
 		}
 
 		localErr = fusermountParentReadFile.Close()
-		if nil != localErr {
+		if localErr != nil {
 			volume.logger.Printf("Volume %s DoMount() unable to close fusermountParentReadFile: %v", volume.volumeName, err)
 		}
 	}()
@@ -185,7 +184,7 @@ func (volume *volumeStruct) DoMount() (err error) {
 		mountOptions += ",allow_other"
 	}
 
-	if "" != volume.fuseSubtype {
+	if volume.fuseSubtype != "" {
 		fuseSubtypeOption = "subtype=" + volume.fuseSubtype
 		mountOptions += "," + fuseSubtypeOption
 	}
@@ -211,7 +210,7 @@ func (volume *volumeStruct) DoMount() (err error) {
 	scanPipeWaitGroup.Add(2)
 
 	mountCmdStdoutPipe, err = mountCmd.StdoutPipe()
-	if nil == err {
+	if err == nil {
 		go volume.scanPipe("mountCmdStdoutPipe", mountCmdStdoutPipe, nil, &scanPipeWaitGroup)
 	} else {
 		volume.logger.Printf("Volume %s DoMount() unable to create mountCmd.StdoutPipe: %v", volume.volumeName, err)
@@ -219,7 +218,7 @@ func (volume *volumeStruct) DoMount() (err error) {
 	}
 
 	mountCmdStderrPipe, err = mountCmd.StderrPipe()
-	if nil == err {
+	if err == nil {
 		go volume.scanPipe("mountCmdStderrPipe", mountCmdStderrPipe, &fusermountLineCount, &scanPipeWaitGroup)
 	} else {
 		volume.logger.Printf("Volume %s DoMount() unable to create mountCmd.StderrPipe: %v", volume.volumeName, err)
@@ -229,7 +228,7 @@ func (volume *volumeStruct) DoMount() (err error) {
 	volume.doInitWG.Add(1)
 
 	err = mountCmd.Start()
-	if nil != err {
+	if err != nil {
 		volume.logger.Printf("Volume %s DoMount() unable to mountCmd.Start(): %v", volume.volumeName, err)
 		return
 	}
@@ -245,27 +244,27 @@ func (volume *volumeStruct) DoMount() (err error) {
 		err = fmt.Errorf("Volume %s DoMount() failed", volume.volumeName)
 		return
 	}
-	if nil != err {
+	if err != nil {
 		volume.logger.Printf("Volume %s DoMount() got error from fusermount: %v", volume.volumeName, err)
 		return
 	}
 
 	socketControlMessages, err = syscall.ParseSocketControlMessage(recvmsgOOB[:recvmsgOOBN])
-	if nil != err {
+	if err != nil {
 		volume.logger.Printf("Volume %s DoMount() unable to syscall.ParseSocketControlMessage(): %v", volume.volumeName, err)
 		return
 	}
-	if 1 != len(socketControlMessages) {
+	if len(socketControlMessages) != 1 {
 		volume.logger.Printf("Volume %s DoMount() got unexpected len(socketControlMessages): %v", volume.volumeName, len(socketControlMessages))
 		return
 	}
 
 	childOpenFDs, err = syscall.ParseUnixRights(&socketControlMessages[0])
-	if nil != err {
+	if err != nil {
 		volume.logger.Printf("Volume %s DoMount() unable to syscall.ParseUnixRights(): %v", volume.volumeName, err)
 		return
 	}
-	if 1 != len(childOpenFDs) {
+	if len(childOpenFDs) != 1 {
 		volume.logger.Printf("Volume %s DoMount() got unexpected len(childOpenFDs): %v", volume.volumeName, len(childOpenFDs))
 		return
 	}
@@ -277,7 +276,7 @@ func (volume *volumeStruct) DoMount() (err error) {
 	go volume.devFuseFDReader()
 
 	err = mountCmd.Wait()
-	if nil != err {
+	if err != nil {
 		volume.logger.Printf("Volume %s DoMount() got error from fusermount: %v", volume.volumeName, err)
 		return
 	}
@@ -298,20 +297,20 @@ func (volume *volumeStruct) DoUnmount() (err error) {
 	)
 
 	fusermountProgramPath, err = exec.LookPath("fusermount")
-	if nil != err {
+	if err != nil {
 		volume.logger.Printf("DoUnmount() unable to find program `fusermount`: %v", err)
 		return
 	}
 
 	unmountCmd = exec.Command(fusermountProgramPath, "-u", "-q", "-z", "--", volume.mountpointDirPath)
 	unmountCmdCombinedOutput, err = unmountCmd.CombinedOutput()
-	if nil != err {
-		volume.logger.Printf("DoUnmount() unable to unmount %s (%v): %s", volume.volumeName, err, string(unmountCmdCombinedOutput[:]))
+	if err != nil {
+		volume.logger.Printf("DoUnmount() unable to unmount %s (%v): %s", volume.volumeName, err, string(unmountCmdCombinedOutput))
 		return
 	}
 
 	err = syscall.Close(volume.devFuseFD)
-	if nil != err {
+	if err != nil {
 		volume.logger.Printf("DoUnmount() unable to close /dev/fuse: %v", err)
 		return
 	}
@@ -332,7 +331,7 @@ func (volume *volumeStruct) scanPipe(name string, pipe io.ReadCloser, lineCount 
 	pipeScanner = bufio.NewScanner(pipe)
 
 	for pipeScanner.Scan() {
-		if nil != lineCount {
+		if lineCount != nil {
 			atomic.AddUint32(lineCount, 1)
 		}
 		volume.logger.Printf("Volume %s DoMount() %s: %s", volume.volumeName, name, pipeScanner.Text())
@@ -348,13 +347,13 @@ func (volume *volumeStruct) awaitScanPipe(wg *sync.WaitGroup, lineCount *uint32,
 
 	wg.Wait()
 
-	if 0 != *lineCount {
+	if *lineCount != 0 {
 		*syscallRecvmsgAborted = true
 
 		volume.logger.Printf("Volume %s DoMount() got error(s) from fusermount - exiting", volume.volumeName)
 
 		err = syscall.Close(int(fusermountChildWriteFile.Fd()))
-		if nil != err {
+		if err != nil {
 			volume.logger.Printf("DoMount() unable to close fusermountChildWriteFile: %v", err)
 		}
 	}
@@ -382,10 +381,10 @@ func (volume *volumeStruct) devFuseFDReader() {
 
 	RetrySyscallRead:
 		bytesRead, err = syscall.Read(volume.devFuseFD, devFuseFDReadBuf)
-		if nil != err {
+		if err != nil {
 			// First check for EINTR
 
-			if 0 == strings.Compare("interrupted system call", err.Error()) {
+			if err.Error() == "interrupted system call" {
 				goto RetrySyscallRead
 			}
 
@@ -393,7 +392,7 @@ func (volume *volumeStruct) devFuseFDReader() {
 
 			volume.devFuseFDReadPoolPut(devFuseFDReadBuf)
 
-			if 0 == strings.Compare("operation not permitted", err.Error()) {
+			if err.Error() == "operation not permitted" {
 				// Special case... simply retry the Read
 				continue
 			}
@@ -405,11 +404,12 @@ func (volume *volumeStruct) devFuseFDReader() {
 
 			// Signal errChan that we are exiting (passing <nil> if due to close of volume.devFuseFD)
 
-			if 0 == strings.Compare("no such device", err.Error()) {
+			switch err.Error() {
+			case "no such device":
 				volume.errChan <- nil
-			} else if 0 == strings.Compare("operation not supported by device", err.Error()) {
+			case "operation not supported by device":
 				volume.errChan <- nil
-			} else {
+			default:
 				volume.logger.Printf("Exiting due to /dev/fuse Read err: %v", err)
 				volume.errChan <- err
 			}
@@ -577,7 +577,7 @@ func (volume *volumeStruct) devFuseFDWriter(inHeader *InHeader, errno syscall.Er
 	// Construct iovec elements for supplied bufs (if any)
 
 	for _, buf = range bufs {
-		if 0 != len(buf) {
+		if len(buf) != 0 {
 			iovec = append(iovec, syscall.Iovec{Base: &buf[0], Len: uint64(len(buf))})
 			iovecSpan += uintptr(len(buf))
 		}
@@ -595,7 +595,7 @@ RetrySyscallWriteV:
 		uintptr(volume.devFuseFD),
 		uintptr(unsafe.Pointer(&iovec[0])),
 		uintptr(len(iovec)))
-	if 0 == errno {
+	if errno == 0 {
 		if bytesWritten != iovecSpan {
 			volume.logger.Printf("Write to /dev/fuse returned bad bytesWritten: %v", bytesWritten)
 		}
@@ -609,9 +609,9 @@ RetrySyscallWriteV:
 
 func cloneByteSlice(inBuf []byte, andTrimTrailingNullByte bool) (outBuf []byte) {
 	outBuf = make([]byte, len(inBuf))
-	if 0 != len(inBuf) {
+	if len(inBuf) != 0 {
 		_ = copy(outBuf, inBuf)
-		if andTrimTrailingNullByte && (0 == outBuf[len(outBuf)-1]) {
+		if andTrimTrailingNullByte && (outBuf[len(outBuf)-1] == 0) {
 			outBuf = outBuf[:len(outBuf)-1]
 		}
 	}

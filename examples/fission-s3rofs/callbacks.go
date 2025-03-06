@@ -1,4 +1,4 @@
-// Copyright (c) 2023, NVIDIA CORPORATION.
+// Copyright (c) 2023-2025, NVIDIA CORPORATION.
 // SPDX-License-Identifier: Apache-2.0
 
 package main
@@ -45,16 +45,17 @@ func populateAttr(attr *fission.Attr, inode *inodeStruct) {
 	attr.RDev = attrRDev
 	attr.Padding = 0
 
-	if (inode.mode & syscall.S_IFMT) == syscall.S_IFDIR {
+	switch inode.mode & syscall.S_IFMT {
+	case syscall.S_IFDIR:
 		attr.Size = 0
 		attr.Blocks = 0
 		attr.BlkSize = 0
-	} else if (inode.mode & syscall.S_IFMT) == syscall.S_IFREG {
+	case syscall.S_IFREG:
 		attr.Size = inode.size
 		attr.Blocks = attr.Size + (uint64(attrBlkSize) - 1)
 		attr.Blocks /= uint64(attrBlkSize)
 		attr.BlkSize = attrBlkSize
-	} else {
+	default:
 		globals.logger.Fatalf("(inode.mode & syscall.S_IFMT) [0x%04X] must be either syscall.S_ISDIR [0x%04X] or syscall.S_ISREG [0x%04X]", (inode.mode & syscall.S_IFMT), syscall.S_IFDIR, syscall.S_IFDIR)
 	}
 }
@@ -85,9 +86,9 @@ func (dummy *globalsStruct) DoLookup(inHeader *fission.InHeader, lookupIn *fissi
 		return
 	}
 
-	dirEntryAsValue, ok, err = dirInode.dirTable.GetByKey(string(lookupIn.Name[:]))
-	if nil != err {
-		globals.logger.Fatalf("globals.rootDirMap.GetByKey(\"%s\") failed: %v\n", string(lookupIn.Name[:]), err)
+	dirEntryAsValue, ok, err = dirInode.dirTable.GetByKey(string(lookupIn.Name))
+	if err != nil {
+		globals.logger.Fatalf("globals.rootDirMap.GetByKey(\"%s\") failed: %v\n", string(lookupIn.Name), err)
 	}
 	if !ok {
 		errno = syscall.ENOENT
@@ -340,7 +341,7 @@ func (dummy *globalsStruct) DoRead(inHeader *fission.InHeader, readIn *fission.R
 						fileCacheLine.listElement = globals.fileCacheLRU.PushBack(fileCacheLine)
 						globals.fileCacheMap[fileCacheLine.tag] = fileCacheLine
 						globals.Unlock()
-						err = os.WriteFile(fmt.Sprintf("%s/%08X_%08X", globals.fileCacheDir, fileCacheLine.tag.inodeNumber, fileCacheLine.tag.lineNumber), ramCacheLineContent, 0600)
+						err = os.WriteFile(fmt.Sprintf("%s/%08X_%08X", globals.fileCacheDir, fileCacheLine.tag.inodeNumber, fileCacheLine.tag.lineNumber), ramCacheLineContent, 0o600)
 						if err != nil {
 							globals.logger.Fatalf("os.WriteFile(\"%s/%08X_%08X\", ramCacheLineContent, 0600) failed: %v\n", globals.fileCacheDir, fileCacheLine.tag.inodeNumber, fileCacheLine.tag.lineNumber, err)
 						}
@@ -359,7 +360,7 @@ func (dummy *globalsStruct) DoRead(inHeader *fission.InHeader, readIn *fission.R
 
 		// Next, see if we need to prune fileCache (if enabled)
 
-		if globals.config.FileCacheLines >= 0 {
+		if globals.config.FileCacheLines > 0 {
 			if uint64(len(globals.fileCacheMap)) > globals.config.FileCacheLines {
 				listElement = globals.fileCacheLRU.Front()
 				fileCacheLine, ok = listElement.Value.(*fileCacheLineStruct)

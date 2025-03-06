@@ -88,7 +88,7 @@ type Callbacks interface {
 // users access to the mount point. A chan error is also supplied to enable the Volume to indicate
 // that it is no longer servicing FUSE upcalls (e.g. as a result of an intentional DoUnmount() call
 // or some unexpected error reading from /dev/fuse).
-func NewVolume(volumeName string, mountpointDirPath string, fuseSubtype string, maxRead uint32, maxWrite uint32, defaultPermissions bool, allowOther bool, callbacks Callbacks, logger *log.Logger, errChan chan error) (volume Volume) {
+func NewVolume(volumeName, mountpointDirPath, fuseSubtype string, maxRead, maxWrite uint32, defaultPermissions, allowOther bool, callbacks Callbacks, logger *log.Logger, errChan chan error) (volume Volume) {
 	volume = newVolume(volumeName, mountpointDirPath, fuseSubtype, maxRead, maxWrite, defaultPermissions, allowOther, callbacks, logger, errChan)
 	return
 }
@@ -128,7 +128,7 @@ func NewVolume(volumeName string, mountpointDirPath string, fuseSubtype string, 
 //  6.6      7.39
 //  6.9      7.40
 //  6.12     7.41
-//  6.14-rc1 7.42
+//  6.14     7.42
 
 const AttrSize = 88
 
