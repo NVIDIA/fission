@@ -295,7 +295,7 @@ func main() {
 			},
 		}),
 		config.WithEndpointResolverWithOptions(aws.EndpointResolverWithOptionsFunc(
-			func(service, region string, options ...interface{}) (aws.Endpoint, error) {
+			func(_, _ string, _ ...interface{}) (aws.Endpoint, error) {
 				return aws.Endpoint{
 					URL:               globals.config.S3Endpoint,
 					SigningRegion:     globals.config.S3Region,
@@ -475,7 +475,7 @@ func main() {
 	}
 }
 
-func (inode *inodeStruct) DumpKey(key sortedmap.Key) (keyAsString string, err error) {
+func (*inodeStruct) DumpKey(key sortedmap.Key) (keyAsString string, err error) {
 	var (
 		ok bool
 	)
@@ -490,7 +490,7 @@ func (inode *inodeStruct) DumpKey(key sortedmap.Key) (keyAsString string, err er
 	return
 }
 
-func (inode *inodeStruct) DumpValue(value sortedmap.Value) (valueAsString string, err error) {
+func (*inodeStruct) DumpValue(value sortedmap.Value) (valueAsString string, err error) {
 	var (
 		ok            bool
 		valueAsUint64 uint64

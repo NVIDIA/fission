@@ -453,10 +453,9 @@ func fetchAuthToken() (authToken string) {
 			globals.Unlock()
 			localAuthWG.Wait()
 			goto RetryGetAuthTokenWait
-		} else {
-			authToken = globals.authToken
-			globals.Unlock()
 		}
+		authToken = globals.authToken
+		globals.Unlock()
 	}
 
 	return
@@ -540,7 +539,7 @@ func goTimeToUnixTime(goTime time.Time) (unixTimeSec uint64, unixTimeNSec uint32
 	return
 }
 
-func (dummy *globalsStruct) DumpKey(key sortedmap.Key) (keyAsString string, err error) {
+func (*globalsStruct) DumpKey(key sortedmap.Key) (keyAsString string, err error) {
 	var (
 		ok bool
 	)
@@ -555,7 +554,7 @@ func (dummy *globalsStruct) DumpKey(key sortedmap.Key) (keyAsString string, err 
 	return
 }
 
-func (dummy *globalsStruct) DumpValue(value sortedmap.Value) (valueAsString string, err error) {
+func (*globalsStruct) DumpValue(value sortedmap.Value) (valueAsString string, err error) {
 	var (
 		ok              bool
 		valueAsDirEntry *dirEntryStruct

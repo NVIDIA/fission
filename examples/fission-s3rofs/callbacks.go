@@ -69,7 +69,7 @@ func fetchInode(inodeNumber uint64) (inode *inodeStruct) {
 	return
 }
 
-func (dummy *globalsStruct) DoLookup(inHeader *fission.InHeader, lookupIn *fission.LookupIn) (lookupOut *fission.LookupOut, errno syscall.Errno) {
+func (*globalsStruct) DoLookup(inHeader *fission.InHeader, lookupIn *fission.LookupIn) (lookupOut *fission.LookupOut, errno syscall.Errno) {
 	var (
 		dirEntryAsValue     sortedmap.Value
 		dirEntryInode       *inodeStruct
@@ -121,12 +121,12 @@ func (dummy *globalsStruct) DoLookup(inHeader *fission.InHeader, lookupIn *fissi
 	return
 }
 
-func (dummy *globalsStruct) DoForget(inHeader *fission.InHeader, forgetIn *fission.ForgetIn) {
+func (*globalsStruct) DoForget(_ *fission.InHeader, _ *fission.ForgetIn) {
 }
 
-func (dummy *globalsStruct) DoGetAttr(inHeader *fission.InHeader, getAttrIn *fission.GetAttrIn) (getAttrOut *fission.GetAttrOut, errno syscall.Errno) {
+func (*globalsStruct) DoGetAttr(inHeader *fission.InHeader, _ *fission.GetAttrIn) (getAttrOut *fission.GetAttrOut, errno syscall.Errno) {
 	var (
-		inode *inodeStruct = fetchInode(inHeader.NodeID)
+		inode = fetchInode(inHeader.NodeID)
 	)
 
 	if inode == nil {
@@ -146,54 +146,54 @@ func (dummy *globalsStruct) DoGetAttr(inHeader *fission.InHeader, getAttrIn *fis
 	return
 }
 
-func (dummy *globalsStruct) DoSetAttr(inHeader *fission.InHeader, setAttrIn *fission.SetAttrIn) (setAttrOut *fission.SetAttrOut, errno syscall.Errno) {
+func (*globalsStruct) DoSetAttr(_ *fission.InHeader, _ *fission.SetAttrIn) (setAttrOut *fission.SetAttrOut, errno syscall.Errno) {
 	errno = syscall.ENOSYS
 	return
 }
 
-func (dummy *globalsStruct) DoReadLink(inHeader *fission.InHeader) (readLinkOut *fission.ReadLinkOut, errno syscall.Errno) {
+func (*globalsStruct) DoReadLink(_ *fission.InHeader) (readLinkOut *fission.ReadLinkOut, errno syscall.Errno) {
 	errno = syscall.ENOSYS
 	return
 }
 
-func (dummy *globalsStruct) DoSymLink(inHeader *fission.InHeader, symLinkIn *fission.SymLinkIn) (symLinkOut *fission.SymLinkOut, errno syscall.Errno) {
+func (*globalsStruct) DoSymLink(_ *fission.InHeader, _ *fission.SymLinkIn) (symLinkOut *fission.SymLinkOut, errno syscall.Errno) {
 	errno = syscall.ENOSYS
 	return
 }
 
-func (dummy *globalsStruct) DoMkNod(inHeader *fission.InHeader, mkNodIn *fission.MkNodIn) (mkNodOut *fission.MkNodOut, errno syscall.Errno) {
+func (*globalsStruct) DoMkNod(_ *fission.InHeader, _ *fission.MkNodIn) (mkNodOut *fission.MkNodOut, errno syscall.Errno) {
 	errno = syscall.ENOSYS
 	return
 }
 
-func (dummy *globalsStruct) DoMkDir(inHeader *fission.InHeader, mkDirIn *fission.MkDirIn) (mkDirOut *fission.MkDirOut, errno syscall.Errno) {
+func (*globalsStruct) DoMkDir(_ *fission.InHeader, _ *fission.MkDirIn) (mkDirOut *fission.MkDirOut, errno syscall.Errno) {
 	errno = syscall.ENOSYS
 	return
 }
 
-func (dummy *globalsStruct) DoUnlink(inHeader *fission.InHeader, unlinkIn *fission.UnlinkIn) (errno syscall.Errno) {
+func (*globalsStruct) DoUnlink(_ *fission.InHeader, _ *fission.UnlinkIn) (errno syscall.Errno) {
 	errno = syscall.ENOSYS
 	return
 }
 
-func (dummy *globalsStruct) DoRmDir(inHeader *fission.InHeader, rmDirIn *fission.RmDirIn) (errno syscall.Errno) {
+func (*globalsStruct) DoRmDir(_ *fission.InHeader, _ *fission.RmDirIn) (errno syscall.Errno) {
 	errno = syscall.ENOSYS
 	return
 }
 
-func (dummy *globalsStruct) DoRename(inHeader *fission.InHeader, renameIn *fission.RenameIn) (errno syscall.Errno) {
+func (*globalsStruct) DoRename(_ *fission.InHeader, _ *fission.RenameIn) (errno syscall.Errno) {
 	errno = syscall.ENOSYS
 	return
 }
 
-func (dummy *globalsStruct) DoLink(inHeader *fission.InHeader, linkIn *fission.LinkIn) (linkOut *fission.LinkOut, errno syscall.Errno) {
+func (*globalsStruct) DoLink(_ *fission.InHeader, _ *fission.LinkIn) (linkOut *fission.LinkOut, errno syscall.Errno) {
 	errno = syscall.ENOSYS
 	return
 }
 
-func (dummy *globalsStruct) DoOpen(inHeader *fission.InHeader, openIn *fission.OpenIn) (openOut *fission.OpenOut, errno syscall.Errno) {
+func (*globalsStruct) DoOpen(inHeader *fission.InHeader, _ *fission.OpenIn) (openOut *fission.OpenOut, errno syscall.Errno) {
 	var (
-		fileInode *inodeStruct = fetchInode(inHeader.NodeID)
+		fileInode = fetchInode(inHeader.NodeID)
 	)
 
 	if fileInode == nil {
@@ -255,7 +255,7 @@ func (fileInode *inodeStruct) fetchCacheLine(lineNumber uint64) (objectCacheLine
 	return
 }
 
-func (dummy *globalsStruct) DoRead(inHeader *fission.InHeader, readIn *fission.ReadIn) (readOut *fission.ReadOut, errno syscall.Errno) {
+func (*globalsStruct) DoRead(inHeader *fission.InHeader, readIn *fission.ReadIn) (readOut *fission.ReadOut, errno syscall.Errno) {
 	var (
 		cacheLineTag                 cacheLineTagStruct
 		err                          error
@@ -476,12 +476,12 @@ func (dummy *globalsStruct) DoRead(inHeader *fission.InHeader, readIn *fission.R
 	return
 }
 
-func (dummy *globalsStruct) DoWrite(inHeader *fission.InHeader, writeIn *fission.WriteIn) (writeOut *fission.WriteOut, errno syscall.Errno) {
+func (*globalsStruct) DoWrite(_ *fission.InHeader, _ *fission.WriteIn) (writeOut *fission.WriteOut, errno syscall.Errno) {
 	errno = syscall.ENOSYS
 	return
 }
 
-func (dummy *globalsStruct) DoStatFS(inHeader *fission.InHeader) (statFSOut *fission.StatFSOut, errno syscall.Errno) {
+func (*globalsStruct) DoStatFS(_ *fission.InHeader) (statFSOut *fission.StatFSOut, errno syscall.Errno) {
 	statFSOut = &fission.StatFSOut{
 		KStatFS: fission.KStatFS{
 			Blocks:  globals.blocks,
@@ -501,9 +501,9 @@ func (dummy *globalsStruct) DoStatFS(inHeader *fission.InHeader) (statFSOut *fis
 	return
 }
 
-func (dummy *globalsStruct) DoRelease(inHeader *fission.InHeader, releaseIn *fission.ReleaseIn) (errno syscall.Errno) {
+func (*globalsStruct) DoRelease(inHeader *fission.InHeader, _ *fission.ReleaseIn) (errno syscall.Errno) {
 	var (
-		fileInode *inodeStruct = fetchInode(inHeader.NodeID)
+		fileInode = fetchInode(inHeader.NodeID)
 	)
 
 	if fileInode == nil {
@@ -520,37 +520,37 @@ func (dummy *globalsStruct) DoRelease(inHeader *fission.InHeader, releaseIn *fis
 	return
 }
 
-func (dummy *globalsStruct) DoFSync(inHeader *fission.InHeader, fSyncIn *fission.FSyncIn) (errno syscall.Errno) {
+func (*globalsStruct) DoFSync(_ *fission.InHeader, _ *fission.FSyncIn) (errno syscall.Errno) {
 	errno = syscall.ENOSYS
 	return
 }
 
-func (dummy *globalsStruct) DoSetXAttr(inHeader *fission.InHeader, setXAttrIn *fission.SetXAttrIn) (errno syscall.Errno) {
+func (*globalsStruct) DoSetXAttr(_ *fission.InHeader, _ *fission.SetXAttrIn) (errno syscall.Errno) {
 	errno = syscall.ENOSYS
 	return
 }
 
-func (dummy *globalsStruct) DoGetXAttr(inHeader *fission.InHeader, getXAttrIn *fission.GetXAttrIn) (getXAttrOut *fission.GetXAttrOut, errno syscall.Errno) {
+func (*globalsStruct) DoGetXAttr(_ *fission.InHeader, _ *fission.GetXAttrIn) (getXAttrOut *fission.GetXAttrOut, errno syscall.Errno) {
 	errno = syscall.ENOSYS
 	return
 }
 
-func (dummy *globalsStruct) DoListXAttr(inHeader *fission.InHeader, listXAttrIn *fission.ListXAttrIn) (listXAttrOut *fission.ListXAttrOut, errno syscall.Errno) {
+func (*globalsStruct) DoListXAttr(_ *fission.InHeader, _ *fission.ListXAttrIn) (listXAttrOut *fission.ListXAttrOut, errno syscall.Errno) {
 	errno = syscall.ENOSYS
 	return
 }
 
-func (dummy *globalsStruct) DoRemoveXAttr(inHeader *fission.InHeader, removeXAttrIn *fission.RemoveXAttrIn) (errno syscall.Errno) {
+func (*globalsStruct) DoRemoveXAttr(_ *fission.InHeader, _ *fission.RemoveXAttrIn) (errno syscall.Errno) {
 	errno = syscall.ENOSYS
 	return
 }
 
-func (dummy *globalsStruct) DoFlush(inHeader *fission.InHeader, flushIn *fission.FlushIn) (errno syscall.Errno) {
+func (*globalsStruct) DoFlush(_ *fission.InHeader, _ *fission.FlushIn) (errno syscall.Errno) {
 	errno = 0
 	return
 }
 
-func (dummy *globalsStruct) DoInit(inHeader *fission.InHeader, initIn *fission.InitIn) (initOut *fission.InitOut, errno syscall.Errno) {
+func (*globalsStruct) DoInit(_ *fission.InHeader, initIn *fission.InitIn) (initOut *fission.InitOut, errno syscall.Errno) {
 	initOut = &fission.InitOut{
 		Major:                initIn.Major,
 		Minor:                initIn.Minor,
@@ -570,9 +570,9 @@ func (dummy *globalsStruct) DoInit(inHeader *fission.InHeader, initIn *fission.I
 	return
 }
 
-func (dummy *globalsStruct) DoOpenDir(inHeader *fission.InHeader, openDirIn *fission.OpenDirIn) (openDirOut *fission.OpenDirOut, errno syscall.Errno) {
+func (*globalsStruct) DoOpenDir(inHeader *fission.InHeader, _ *fission.OpenDirIn) (openDirOut *fission.OpenDirOut, errno syscall.Errno) {
 	var (
-		dirInode *inodeStruct = fetchInode(inHeader.NodeID)
+		dirInode = fetchInode(inHeader.NodeID)
 	)
 
 	if dirInode == nil {
@@ -595,7 +595,7 @@ func (dummy *globalsStruct) DoOpenDir(inHeader *fission.InHeader, openDirIn *fis
 	return
 }
 
-func (dummy *globalsStruct) DoReadDir(inHeader *fission.InHeader, readDirIn *fission.ReadDirIn) (readDirOut *fission.ReadDirOut, errno syscall.Errno) {
+func (*globalsStruct) DoReadDir(inHeader *fission.InHeader, readDirIn *fission.ReadDirIn) (readDirOut *fission.ReadDirOut, errno syscall.Errno) {
 	var (
 		dirEntCountMax           uint64
 		dirEntMinSize            uint64
@@ -699,9 +699,9 @@ func (dummy *globalsStruct) DoReadDir(inHeader *fission.InHeader, readDirIn *fis
 	return
 }
 
-func (dummy *globalsStruct) DoReleaseDir(inHeader *fission.InHeader, releaseDirIn *fission.ReleaseDirIn) (errno syscall.Errno) {
+func (*globalsStruct) DoReleaseDir(inHeader *fission.InHeader, _ *fission.ReleaseDirIn) (errno syscall.Errno) {
 	var (
-		dirInode *inodeStruct = fetchInode(inHeader.NodeID)
+		dirInode = fetchInode(inHeader.NodeID)
 	)
 
 	if dirInode == nil {
@@ -718,29 +718,29 @@ func (dummy *globalsStruct) DoReleaseDir(inHeader *fission.InHeader, releaseDirI
 	return
 }
 
-func (dummy *globalsStruct) DoFSyncDir(inHeader *fission.InHeader, fSyncDirIn *fission.FSyncDirIn) (errno syscall.Errno) {
+func (*globalsStruct) DoFSyncDir(_ *fission.InHeader, _ *fission.FSyncDirIn) (errno syscall.Errno) {
 	errno = syscall.ENOSYS
 	return
 }
 
-func (dummy *globalsStruct) DoGetLK(inHeader *fission.InHeader, getLKIn *fission.GetLKIn) (getLKOut *fission.GetLKOut, errno syscall.Errno) {
+func (*globalsStruct) DoGetLK(_ *fission.InHeader, _ *fission.GetLKIn) (getLKOut *fission.GetLKOut, errno syscall.Errno) {
 	errno = syscall.ENOSYS
 	return
 }
 
-func (dummy *globalsStruct) DoSetLK(inHeader *fission.InHeader, setLKIn *fission.SetLKIn) (errno syscall.Errno) {
+func (*globalsStruct) DoSetLK(_ *fission.InHeader, _ *fission.SetLKIn) (errno syscall.Errno) {
 	errno = syscall.ENOSYS
 	return
 }
 
-func (dummy *globalsStruct) DoSetLKW(inHeader *fission.InHeader, setLKWIn *fission.SetLKWIn) (errno syscall.Errno) {
+func (*globalsStruct) DoSetLKW(_ *fission.InHeader, _ *fission.SetLKWIn) (errno syscall.Errno) {
 	errno = syscall.ENOSYS
 	return
 }
 
-func (dummy *globalsStruct) DoAccess(inHeader *fission.InHeader, accessIn *fission.AccessIn) (errno syscall.Errno) {
+func (*globalsStruct) DoAccess(inHeader *fission.InHeader, accessIn *fission.AccessIn) (errno syscall.Errno) {
 	var (
-		inode *inodeStruct = fetchInode(inHeader.NodeID)
+		inode = fetchInode(inHeader.NodeID)
 	)
 
 	if inode == nil {
@@ -757,38 +757,38 @@ func (dummy *globalsStruct) DoAccess(inHeader *fission.InHeader, accessIn *fissi
 	return
 }
 
-func (dummy *globalsStruct) DoCreate(inHeader *fission.InHeader, createIn *fission.CreateIn) (createOut *fission.CreateOut, errno syscall.Errno) {
+func (*globalsStruct) DoCreate(_ *fission.InHeader, _ *fission.CreateIn) (createOut *fission.CreateOut, errno syscall.Errno) {
 	errno = syscall.ENOSYS
 	return
 }
 
-func (dummy *globalsStruct) DoInterrupt(inHeader *fission.InHeader, interruptIn *fission.InterruptIn) {
+func (*globalsStruct) DoInterrupt(_ *fission.InHeader, _ *fission.InterruptIn) {
 }
 
-func (dummy *globalsStruct) DoBMap(inHeader *fission.InHeader, bMapIn *fission.BMapIn) (bMapOut *fission.BMapOut, errno syscall.Errno) {
+func (*globalsStruct) DoBMap(_ *fission.InHeader, _ *fission.BMapIn) (bMapOut *fission.BMapOut, errno syscall.Errno) {
 	errno = syscall.ENOSYS
 	return
 }
 
-func (dummy *globalsStruct) DoDestroy(inHeader *fission.InHeader) (errno syscall.Errno) {
+func (*globalsStruct) DoDestroy(_ *fission.InHeader) (errno syscall.Errno) {
 	errno = syscall.ENOSYS
 	return
 }
 
-func (dummy *globalsStruct) DoPoll(inHeader *fission.InHeader, pollIn *fission.PollIn) (pollOut *fission.PollOut, errno syscall.Errno) {
+func (*globalsStruct) DoPoll(_ *fission.InHeader, _ *fission.PollIn) (pollOut *fission.PollOut, errno syscall.Errno) {
 	errno = syscall.ENOSYS
 	return
 }
 
-func (dummy *globalsStruct) DoBatchForget(inHeader *fission.InHeader, batchForgetIn *fission.BatchForgetIn) {
+func (*globalsStruct) DoBatchForget(_ *fission.InHeader, _ *fission.BatchForgetIn) {
 }
 
-func (dummy *globalsStruct) DoFAllocate(inHeader *fission.InHeader, fAllocateIn *fission.FAllocateIn) (errno syscall.Errno) {
+func (*globalsStruct) DoFAllocate(_ *fission.InHeader, _ *fission.FAllocateIn) (errno syscall.Errno) {
 	errno = syscall.ENOSYS
 	return
 }
 
-func (dummy *globalsStruct) DoReadDirPlus(inHeader *fission.InHeader, readDirPlusIn *fission.ReadDirPlusIn) (readDirPlusOut *fission.ReadDirPlusOut, errno syscall.Errno) {
+func (*globalsStruct) DoReadDirPlus(inHeader *fission.InHeader, readDirPlusIn *fission.ReadDirPlusIn) (readDirPlusOut *fission.ReadDirPlusOut, errno syscall.Errno) {
 	var (
 		dirEntPlusCountMax       uint64
 		dirEntPlusMinSize        uint64
@@ -904,12 +904,12 @@ func (dummy *globalsStruct) DoReadDirPlus(inHeader *fission.InHeader, readDirPlu
 	return
 }
 
-func (dummy *globalsStruct) DoRename2(inHeader *fission.InHeader, rename2In *fission.Rename2In) (errno syscall.Errno) {
+func (*globalsStruct) DoRename2(_ *fission.InHeader, _ *fission.Rename2In) (errno syscall.Errno) {
 	errno = syscall.ENOSYS
 	return
 }
 
-func (dummy *globalsStruct) DoLSeek(inHeader *fission.InHeader, lSeekIn *fission.LSeekIn) (lSeekOut *fission.LSeekOut, errno syscall.Errno) {
+func (*globalsStruct) DoLSeek(_ *fission.InHeader, _ *fission.LSeekIn) (lSeekOut *fission.LSeekOut, errno syscall.Errno) {
 	errno = syscall.ENOSYS
 	return
 }

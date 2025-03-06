@@ -210,20 +210,20 @@ func (volume *volumeStruct) DoMount() (err error) {
 	scanPipeWaitGroup.Add(2)
 
 	mountCmdStdoutPipe, err = mountCmd.StdoutPipe()
-	if err == nil {
-		go volume.scanPipe("mountCmdStdoutPipe", mountCmdStdoutPipe, nil, &scanPipeWaitGroup)
-	} else {
+	if err != nil {
 		volume.logger.Printf("Volume %s DoMount() unable to create mountCmd.StdoutPipe: %v", volume.volumeName, err)
 		return
 	}
 
+	go volume.scanPipe("mountCmdStdoutPipe", mountCmdStdoutPipe, nil, &scanPipeWaitGroup)
+
 	mountCmdStderrPipe, err = mountCmd.StderrPipe()
-	if err == nil {
-		go volume.scanPipe("mountCmdStderrPipe", mountCmdStderrPipe, &fusermountLineCount, &scanPipeWaitGroup)
-	} else {
+	if err != nil {
 		volume.logger.Printf("Volume %s DoMount() unable to create mountCmd.StderrPipe: %v", volume.volumeName, err)
 		return
 	}
+
+	go volume.scanPipe("mountCmdStderrPipe", mountCmdStderrPipe, &fusermountLineCount, &scanPipeWaitGroup)
 
 	volume.doInitWG.Add(1)
 

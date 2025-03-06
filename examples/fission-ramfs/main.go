@@ -278,7 +278,7 @@ func (grantedLockSet *grantedLockSetStruct) try(tryLock *tryLockStruct) (granted
 
 func (grantedLockSet *grantedLockSetStruct) free(tryLock *tryLockStruct) {
 	var (
-		lockCount uint64 = grantedLockSet.set[tryLock]
+		lockCount = grantedLockSet.set[tryLock]
 	)
 
 	lockCount--
@@ -330,25 +330,25 @@ func cloneByteSlice(inBuf []byte) (outBuf []byte) {
 	return
 }
 
-func (dummy *xattrMapDummyStruct) DumpKey(key sortedmap.Key) (keyAsString string, err error) {
+func (*xattrMapDummyStruct) DumpKey(key sortedmap.Key) (keyAsString string, err error) {
 	keyAsString = string(key.([]byte))
 	err = nil
 	return
 }
 
-func (dummy *xattrMapDummyStruct) DumpValue(value sortedmap.Value) (valueAsString string, err error) {
+func (*xattrMapDummyStruct) DumpValue(value sortedmap.Value) (valueAsString string, err error) {
 	valueAsString = fmt.Sprintf("%v", value.([]byte))
 	err = nil
 	return
 }
 
-func (dummy *dirEntryMapDummyStruct) DumpKey(key sortedmap.Key) (keyAsString string, err error) {
+func (*dirEntryMapDummyStruct) DumpKey(key sortedmap.Key) (keyAsString string, err error) {
 	keyAsString = string(key.([]byte))
 	err = nil
 	return
 }
 
-func (dummy *dirEntryMapDummyStruct) DumpValue(value sortedmap.Value) (valueAsString string, err error) {
+func (*dirEntryMapDummyStruct) DumpValue(value sortedmap.Value) (valueAsString string, err error) {
 	valueAsString = strconv.FormatUint(value.(uint64), 10)
 	err = nil
 	return
