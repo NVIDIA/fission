@@ -7,7 +7,7 @@ linters:
     - copyloopvar
     - depguard
     - dogsled
-    # - dupl
+    - dupl
     - durationcheck
     - errcheck
     - fatcontext
@@ -44,9 +44,9 @@ linters:
 # See: https://golangci-lint.run/usage/linters/
 linters-settings:
   dogsled:
-    # Checks assignments with too many blank identifiers.
-    # Default: 2
     max-blank-identifiers: 3
+  dupl:
+    threshold: 250
   revive:
     ignore-generated-header: true
     severity: warning

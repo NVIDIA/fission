@@ -796,210 +796,7 @@ Restart:
 }
 
 func (*globalsStruct) DoRename(inHeader *fission.InHeader, renameIn *fission.RenameIn) (errno syscall.Errno) {
-	var (
-		err                         error
-		granted                     bool
-		grantedLockSet              = makeGrantedLockSet()
-		movedInode                  *inodeStruct
-		movedInodeNodeIDAsU64       uint64
-		movedInodeNodeIDAsValue     sortedmap.Value
-		newDirInode                 *inodeStruct
-		ok                          bool
-		oldDirInode                 *inodeStruct
-		replacedInode               *inodeStruct
-		replacedInodeDirEntryMapLen int
-		replacedInodeNodeIDAsU64    uint64
-		replacedInodeNodeIDAsValue  sortedmap.Value
-	)
-
-Restart:
-	grantedLockSet.get(globals.tryLock)
-
-	oldDirInode, ok = globals.inodeMap[inHeader.NodeID]
-	if !ok {
-		grantedLockSet.freeAll(false)
-		errno = syscall.ENOENT
-		return
-	}
-
-	granted = grantedLockSet.try(oldDirInode.tryLock)
-	if !granted {
-		grantedLockSet.freeAll(true)
-		goto Restart
-	}
-
-	if syscall.S_IFDIR != (oldDirInode.attr.Mode & syscall.S_IFMT) {
-		grantedLockSet.freeAll(false)
-		errno = syscall.ENOTDIR
-		return
-	}
-
-	if inHeader.NodeID == renameIn.NewDir {
-		newDirInode = oldDirInode
-	} else {
-		newDirInode, ok = globals.inodeMap[renameIn.NewDir]
-		if !ok {
-			grantedLockSet.freeAll(false)
-			errno = syscall.ENOENT
-			return
-		}
-
-		granted = grantedLockSet.try(newDirInode.tryLock)
-		if !granted {
-			grantedLockSet.freeAll(true)
-			goto Restart
-		}
-
-		if syscall.S_IFDIR != (newDirInode.attr.Mode & syscall.S_IFMT) {
-			grantedLockSet.freeAll(false)
-			errno = syscall.ENOTDIR
-			return
-		}
-	}
-
-	movedInodeNodeIDAsValue, ok, err = oldDirInode.dirEntryMap.GetByKey(renameIn.OldName)
-	if err != nil {
-		globals.logger.Printf("func DoRename(,OldName=%s) failed on .dirEntryMap.GetByKey(): %v", string(renameIn.OldName), err)
-		os.Exit(1)
-	}
-	if !ok {
-		grantedLockSet.freeAll(false)
-		errno = syscall.ENOENT
-		return
-	}
-
-	movedInodeNodeIDAsU64 = movedInodeNodeIDAsValue.(uint64)
-
-	movedInode, ok = globals.inodeMap[movedInodeNodeIDAsU64]
-	if !ok {
-		globals.logger.Printf("func DoRename(,OldName=%s) globals.inodeMap[movedInodeNodeIDAsU64] returned !ok", string(renameIn.OldName))
-		os.Exit(1)
-	}
-
-	granted = grantedLockSet.try(movedInode.tryLock)
-	if !granted {
-		grantedLockSet.freeAll(true)
-		goto Restart
-	}
-
-	replacedInodeNodeIDAsValue, ok, err = newDirInode.dirEntryMap.GetByKey(renameIn.NewName)
-	if err != nil {
-		globals.logger.Printf("func DoRename(,NewName=%s) failed on .dirEntryMap.GetByKey(): %v", string(renameIn.NewName), err)
-		os.Exit(1)
-	}
-
-	if ok {
-		replacedInodeNodeIDAsU64 = replacedInodeNodeIDAsValue.(uint64)
-
-		replacedInode, ok = globals.inodeMap[replacedInodeNodeIDAsU64]
-		if !ok {
-			globals.logger.Printf("func DoRename(,NewName=%s) globals.inodeMap[replacedInodeNodeIDAsU64] returned !ok", string(renameIn.NewName))
-			os.Exit(1)
-		}
-
-		granted = grantedLockSet.try(movedInode.tryLock)
-		if !granted {
-			grantedLockSet.freeAll(true)
-			goto Restart
-		}
-	} else {
-		replacedInode = nil
-	}
-
-	if syscall.S_IFDIR == (movedInode.attr.Mode & syscall.S_IFMT) {
-		if replacedInode != nil {
-			if syscall.S_IFDIR != (movedInode.attr.Mode & syscall.S_IFMT) {
-				grantedLockSet.freeAll(false)
-				errno = syscall.ENOTDIR
-				return
-			}
-
-			replacedInodeDirEntryMapLen, err = replacedInode.dirEntryMap.Len()
-			if err != nil {
-				globals.logger.Printf("func DoRename(,NewName=%s) failed on .dirEntryMap.Len(): %v", string(renameIn.NewName), err)
-				os.Exit(1)
-			}
-
-			if replacedInodeDirEntryMapLen != 2 {
-				grantedLockSet.freeAll(false)
-				errno = syscall.EEXIST
-				return
-			}
-
-			ok, err = newDirInode.dirEntryMap.DeleteByKey(renameIn.NewName)
-			if err != nil {
-				globals.logger.Printf("func DoRename(,[Dir]NewName=%s) failed on .dirEntryMap.DeleteByKey(): %v", string(renameIn.NewName), err)
-				os.Exit(1)
-			}
-			if !ok {
-				globals.logger.Printf("func DoRename(,[Dir]NewName=%s) .dirEntryMap.DeleteByKey() returned !ok", string(renameIn.NewName))
-				os.Exit(1)
-			}
-
-			newDirInode.attr.NLink--
-
-			delete(globals.inodeMap, replacedInode.attr.Ino)
-		}
-
-		oldDirInode.attr.NLink--
-		newDirInode.attr.NLink++
-
-		ok, err = movedInode.dirEntryMap.PatchByKey([]byte(".."), newDirInode.attr.Ino)
-		if err != nil {
-			globals.logger.Printf("func DoRename() failed on .dirEntryMap.PatchByKey(): %v", err)
-			os.Exit(1)
-		}
-		if !ok {
-			globals.logger.Printf("func DoRename() .dirEntryMap.PatchByKey() returned !ok")
-			os.Exit(1)
-		}
-	} else if replacedInode != nil {
-		if syscall.S_IFDIR == (movedInode.attr.Mode & syscall.S_IFMT) {
-			grantedLockSet.freeAll(false)
-			errno = syscall.EISDIR
-			return
-		}
-
-		ok, err = newDirInode.dirEntryMap.DeleteByKey(renameIn.NewName)
-		if err != nil {
-			globals.logger.Printf("func DoRename(,[Non-Dir]NewName=%s) failed on .dirEntryMap.DeleteByKey(): %v", string(renameIn.NewName), err)
-			os.Exit(1)
-		}
-		if !ok {
-			globals.logger.Printf("func DoRename(,[Non-Dir]NewName=%s) .dirEntryMap.DeleteByKey() returned !ok", string(renameIn.NewName))
-			os.Exit(1)
-		}
-
-		replacedInode.attr.NLink--
-
-		if replacedInode.attr.NLink == 0 {
-			delete(globals.inodeMap, replacedInode.attr.Ino)
-		}
-	}
-
-	ok, err = oldDirInode.dirEntryMap.DeleteByKey(renameIn.OldName)
-	if err != nil {
-		globals.logger.Printf("func DoRename(,OldName=%s) failed on .dirEntryMap.DeleteByKey(): %v", string(renameIn.OldName), err)
-		os.Exit(1)
-	}
-	if !ok {
-		globals.logger.Printf("func DoRename() .dirEntryMap.DeleteByKey(,OldName=%s) returned !ok", string(renameIn.OldName))
-		os.Exit(1)
-	}
-
-	ok, err = newDirInode.dirEntryMap.Put(renameIn.NewName, movedInode.attr.Ino)
-	if err != nil {
-		globals.logger.Printf("func DoRename(,OldName=%s) failed on .dirEntryMap.Put(): %v", string(renameIn.NewName), err)
-		os.Exit(1)
-	}
-	if !ok {
-		globals.logger.Printf("func DoRename(,NewName=%s) .dirEntryMap.Put() returned !ok", string(renameIn.NewName))
-		os.Exit(1)
-	}
-
-	grantedLockSet.freeAll(false)
-
-	errno = 0
+	errno = commonRename("DoRename", inHeader.NodeID, renameIn.OldName, renameIn.NewDir, renameIn.NewName)
 	return
 }
 
@@ -2446,6 +2243,28 @@ Restart:
 }
 
 func (*globalsStruct) DoRename2(inHeader *fission.InHeader, rename2In *fission.Rename2In) (errno syscall.Errno) {
+	errno = commonRename("DoRename2", inHeader.NodeID, rename2In.OldName, rename2In.NewDir, rename2In.NewName)
+	return
+}
+
+func (*globalsStruct) DoLSeek(_ *fission.InHeader, _ *fission.LSeekIn) (lSeekOut *fission.LSeekOut, errno syscall.Errno) {
+	errno = syscall.ENOSYS
+	return
+}
+
+func fixAttrSizes(attr *fission.Attr) {
+	if syscall.S_IFREG == (attr.Mode & syscall.S_IFMT) {
+		attr.Blocks = attr.Size + (uint64(attrBlkSize) - 1)
+		attr.Blocks /= uint64(attrBlkSize)
+		attr.BlkSize = attrBlkSize
+	} else {
+		attr.Size = 0
+		attr.Blocks = 0
+		attr.BlkSize = 0
+	}
+}
+
+func commonRename(callerName string, oldDirNodeID uint64, oldName []byte, newDirNodeID uint64, newName []byte) (errno syscall.Errno) {
 	var (
 		err                         error
 		granted                     bool
@@ -2465,7 +2284,7 @@ func (*globalsStruct) DoRename2(inHeader *fission.InHeader, rename2In *fission.R
 Restart:
 	grantedLockSet.get(globals.tryLock)
 
-	oldDirInode, ok = globals.inodeMap[inHeader.NodeID]
+	oldDirInode, ok = globals.inodeMap[oldDirNodeID]
 	if !ok {
 		grantedLockSet.freeAll(false)
 		errno = syscall.ENOENT
@@ -2484,10 +2303,10 @@ Restart:
 		return
 	}
 
-	if inHeader.NodeID == rename2In.NewDir {
+	if oldDirNodeID == newDirNodeID {
 		newDirInode = oldDirInode
 	} else {
-		newDirInode, ok = globals.inodeMap[rename2In.NewDir]
+		newDirInode, ok = globals.inodeMap[newDirNodeID]
 		if !ok {
 			grantedLockSet.freeAll(false)
 			errno = syscall.ENOENT
@@ -2507,9 +2326,9 @@ Restart:
 		}
 	}
 
-	movedInodeNodeIDAsValue, ok, err = oldDirInode.dirEntryMap.GetByKey(rename2In.OldName)
+	movedInodeNodeIDAsValue, ok, err = oldDirInode.dirEntryMap.GetByKey(oldName)
 	if err != nil {
-		globals.logger.Printf("func DoRename2(,OldName=%s) failed on .dirEntryMap.GetByKey(): %v", string(rename2In.OldName), err)
+		globals.logger.Printf("func %s(,OldName=%s) failed on .dirEntryMap.GetByKey(): %v", callerName, string(oldName), err)
 		os.Exit(1)
 	}
 	if !ok {
@@ -2522,7 +2341,7 @@ Restart:
 
 	movedInode, ok = globals.inodeMap[movedInodeNodeIDAsU64]
 	if !ok {
-		globals.logger.Printf("func DoRename2(,OldName=%s) globals.inodeMap[movedInodeNodeIDAsU64] returned !ok", string(rename2In.OldName))
+		globals.logger.Printf("func %s(,OldName=%s) globals.inodeMap[movedInodeNodeIDAsU64] returned !ok", callerName, string(oldName))
 		os.Exit(1)
 	}
 
@@ -2532,9 +2351,9 @@ Restart:
 		goto Restart
 	}
 
-	replacedInodeNodeIDAsValue, ok, err = newDirInode.dirEntryMap.GetByKey(rename2In.NewName)
+	replacedInodeNodeIDAsValue, ok, err = newDirInode.dirEntryMap.GetByKey(newName)
 	if err != nil {
-		globals.logger.Printf("func DoRename2(,NewName=%s) failed on .dirEntryMap.GetByKey(): %v", string(rename2In.NewName), err)
+		globals.logger.Printf("func %s(,NewName=%s) failed on .dirEntryMap.GetByKey(): %v", callerName, string(newName), err)
 		os.Exit(1)
 	}
 
@@ -2543,7 +2362,7 @@ Restart:
 
 		replacedInode, ok = globals.inodeMap[replacedInodeNodeIDAsU64]
 		if !ok {
-			globals.logger.Printf("func DoRename2(,NewName=%s) globals.inodeMap[replacedInodeNodeIDAsU64] returned !ok", string(rename2In.NewName))
+			globals.logger.Printf("func %s(,NewName=%s) globals.inodeMap[replacedInodeNodeIDAsU64] returned !ok", callerName, string(newName))
 			os.Exit(1)
 		}
 
@@ -2566,7 +2385,7 @@ Restart:
 
 			replacedInodeDirEntryMapLen, err = replacedInode.dirEntryMap.Len()
 			if err != nil {
-				globals.logger.Printf("func DoRename2(,NewName=%s) failed on .dirEntryMap.Len(): %v", string(rename2In.NewName), err)
+				globals.logger.Printf("func %s(,NewName=%s) failed on .dirEntryMap.Len(): %v", callerName, string(newName), err)
 				os.Exit(1)
 			}
 
@@ -2576,13 +2395,13 @@ Restart:
 				return
 			}
 
-			ok, err = newDirInode.dirEntryMap.DeleteByKey(rename2In.NewName)
+			ok, err = newDirInode.dirEntryMap.DeleteByKey(newName)
 			if err != nil {
-				globals.logger.Printf("func DoRename2(,[Dir]NewName=%s) failed on .dirEntryMap.DeleteByKey(): %v", string(rename2In.NewName), err)
+				globals.logger.Printf("func %s(,[Dir]NewName=%s) failed on .dirEntryMap.DeleteByKey(): %v", callerName, string(newName), err)
 				os.Exit(1)
 			}
 			if !ok {
-				globals.logger.Printf("func DoRename2(,[Dir]NewName=%s) .dirEntryMap.DeleteByKey() returned !ok", string(rename2In.NewName))
+				globals.logger.Printf("func %s(,[Dir]NewName=%s) .dirEntryMap.DeleteByKey() returned !ok", callerName, string(newName))
 				os.Exit(1)
 			}
 
@@ -2596,11 +2415,11 @@ Restart:
 
 		ok, err = movedInode.dirEntryMap.PatchByKey([]byte(".."), newDirInode.attr.Ino)
 		if err != nil {
-			globals.logger.Printf("func DoRename2() failed on .dirEntryMap.PatchByKey(): %v", err)
+			globals.logger.Printf("func %s() failed on .dirEntryMap.PatchByKey(): %v", callerName, err)
 			os.Exit(1)
 		}
 		if !ok {
-			globals.logger.Printf("func DoRename2() .dirEntryMap.PatchByKey() returned !ok")
+			globals.logger.Printf("func %s() .dirEntryMap.PatchByKey() returned !ok", callerName)
 			os.Exit(1)
 		}
 	} else if replacedInode != nil {
@@ -2610,13 +2429,13 @@ Restart:
 			return
 		}
 
-		ok, err = newDirInode.dirEntryMap.DeleteByKey(rename2In.NewName)
+		ok, err = newDirInode.dirEntryMap.DeleteByKey(newName)
 		if err != nil {
-			globals.logger.Printf("func DoRename2(,[Non-Dir]NewName=%s) failed on .dirEntryMap.DeleteByKey(): %v", string(rename2In.NewName), err)
+			globals.logger.Printf("func %s(,[Non-Dir]NewName=%s) failed on .dirEntryMap.DeleteByKey(): %v", callerName, string(newName), err)
 			os.Exit(1)
 		}
 		if !ok {
-			globals.logger.Printf("func DoRename2(,[Non-Dir]NewName=%s) .dirEntryMap.DeleteByKey() returned !ok", string(rename2In.NewName))
+			globals.logger.Printf("func %s(,[Non-Dir]NewName=%s) .dirEntryMap.DeleteByKey() returned !ok", callerName, string(newName))
 			os.Exit(1)
 		}
 
@@ -2627,23 +2446,23 @@ Restart:
 		}
 	}
 
-	ok, err = oldDirInode.dirEntryMap.DeleteByKey(rename2In.OldName)
+	ok, err = oldDirInode.dirEntryMap.DeleteByKey(oldName)
 	if err != nil {
-		globals.logger.Printf("func DoRename2(,OldName=%s) failed on .dirEntryMap.DeleteByKey(): %v", string(rename2In.OldName), err)
+		globals.logger.Printf("func %s(,OldName=%s) failed on .dirEntryMap.DeleteByKey(): %v", callerName, string(oldName), err)
 		os.Exit(1)
 	}
 	if !ok {
-		globals.logger.Printf("func DoRename2() .dirEntryMap.DeleteByKey(,OldName=%s) returned !ok", string(rename2In.OldName))
+		globals.logger.Printf("func %s() .dirEntryMap.DeleteByKey(,OldName=%s) returned !ok", callerName, string(oldName))
 		os.Exit(1)
 	}
 
-	ok, err = newDirInode.dirEntryMap.Put(rename2In.NewName, movedInode.attr.Ino)
+	ok, err = newDirInode.dirEntryMap.Put(newName, movedInode.attr.Ino)
 	if err != nil {
-		globals.logger.Printf("func DoRename2(,OldName=%s) failed on .dirEntryMap.Put(): %v", string(rename2In.NewName), err)
+		globals.logger.Printf("func %s(,OldName=%s) failed on .dirEntryMap.Put(): %v", callerName, string(newName), err)
 		os.Exit(1)
 	}
 	if !ok {
-		globals.logger.Printf("func DoRename2(,NewName=%s) .dirEntryMap.Put() returned !ok", string(rename2In.NewName))
+		globals.logger.Printf("func %s(,NewName=%s) .dirEntryMap.Put() returned !ok", callerName, string(newName))
 		os.Exit(1)
 	}
 
@@ -2651,21 +2470,4 @@ Restart:
 
 	errno = 0
 	return
-}
-
-func (*globalsStruct) DoLSeek(_ *fission.InHeader, _ *fission.LSeekIn) (lSeekOut *fission.LSeekOut, errno syscall.Errno) {
-	errno = syscall.ENOSYS
-	return
-}
-
-func fixAttrSizes(attr *fission.Attr) {
-	if syscall.S_IFREG == (attr.Mode & syscall.S_IFMT) {
-		attr.Blocks = attr.Size + (uint64(attrBlkSize) - 1)
-		attr.Blocks /= uint64(attrBlkSize)
-		attr.BlkSize = attrBlkSize
-	} else {
-		attr.Size = 0
-		attr.Blocks = 0
-		attr.BlkSize = 0
-	}
 }
