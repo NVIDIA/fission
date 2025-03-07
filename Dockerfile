@@ -1,7 +1,7 @@
 # Copyright (c) 2015-2025, NVIDIA CORPORATION.
 # SPDX-License-Identifier: Apache-2.0
 
-FROM ubuntu:22.04 as base
+FROM ubuntu:24.04 AS base
 
 RUN    apt-get update \
     && apt-get dist-upgrade -y
@@ -12,7 +12,7 @@ RUN echo ${TimeZone} > /etc/timezone
 
 RUN DEBIAN_FRONTEND="noninteractive" apt-get install -y tzdata
 
-FROM base as buildable
+FROM base AS buildable
 
 RUN    apt-get update \
     && apt-get install -y \
@@ -34,7 +34,7 @@ ENV GolangURL="https://golang.org/dl/${GolangBasename}"
 WORKDIR /tmp
 RUN wget -nv ${GolangURL}
 RUN tar -C /usr/local -xzf $GolangBasename
-ENV PATH $PATH:/usr/local/go/bin
+ENV PATH=$PATH:/usr/local/go/bin
 RUN git clone https://github.com/go-delve/delve
 WORKDIR /tmp/delve
 RUN go build github.com/go-delve/delve/cmd/dlv
@@ -62,7 +62,9 @@ COPY . .
 
 RUN git config --global --add safe.directory /fission
 
-FROM buildable as dev
+RUN (. ~/.bashrc_additions && make lint-update)
+
+FROM buildable AS dev
 
 WORKDIR /
 RUN rm -rf /fission
