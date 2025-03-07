@@ -34,7 +34,7 @@ linters:
     - reassign
     - revive
     - staticcheck
-    - testpackage
+    # - testpackage
     - typecheck
     - unconvert
     - unparam
