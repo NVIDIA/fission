@@ -1,4 +1,4 @@
-// Copyright (c) 2015-2021, NVIDIA CORPORATION.
+// Copyright (c) 2015-2025, NVIDIA CORPORATION.
 // SPDX-License-Identifier: Apache-2.0
 
 package fission
@@ -8,6 +8,25 @@ import (
 	"syscall"
 	"unsafe"
 )
+
+func marshalAttr(attr *Attr, outPayload []byte, outPayloadOffset uint32) {
+	*(*uint64)(unsafe.Pointer(&outPayload[outPayloadOffset+0])) = attr.Ino
+	*(*uint64)(unsafe.Pointer(&outPayload[outPayloadOffset+8])) = attr.Size
+	*(*uint64)(unsafe.Pointer(&outPayload[outPayloadOffset+16])) = attr.Blocks
+	*(*uint64)(unsafe.Pointer(&outPayload[outPayloadOffset+24])) = attr.ATimeSec
+	*(*uint64)(unsafe.Pointer(&outPayload[outPayloadOffset+32])) = attr.MTimeSec
+	*(*uint64)(unsafe.Pointer(&outPayload[outPayloadOffset+40])) = attr.CTimeSec
+	*(*uint32)(unsafe.Pointer(&outPayload[outPayloadOffset+48])) = attr.ATimeNSec
+	*(*uint32)(unsafe.Pointer(&outPayload[outPayloadOffset+52])) = attr.MTimeNSec
+	*(*uint32)(unsafe.Pointer(&outPayload[outPayloadOffset+56])) = attr.CTimeNSec
+	*(*uint32)(unsafe.Pointer(&outPayload[outPayloadOffset+60])) = attr.Mode
+	*(*uint32)(unsafe.Pointer(&outPayload[outPayloadOffset+64])) = attr.NLink
+	*(*uint32)(unsafe.Pointer(&outPayload[outPayloadOffset+68])) = attr.UID
+	*(*uint32)(unsafe.Pointer(&outPayload[outPayloadOffset+72])) = attr.GID
+	*(*uint32)(unsafe.Pointer(&outPayload[outPayloadOffset+76])) = attr.RDev
+	*(*uint32)(unsafe.Pointer(&outPayload[outPayloadOffset+80])) = attr.BlkSize
+	*(*uint32)(unsafe.Pointer(&outPayload[outPayloadOffset+84])) = attr.Padding
+}
 
 func (volume *volumeStruct) doLookup(inHeader *InHeader, devFuseFDReadBufPayload []byte) {
 	var (
@@ -97,18 +116,35 @@ func (volume *volumeStruct) doGetAttr(inHeader *InHeader, devFuseFDReadBufPayloa
 
 func (volume *volumeStruct) doSetAttr(inHeader *InHeader, devFuseFDReadBufPayload []byte) {
 	var (
-		err        error
 		errno      syscall.Errno
 		outPayload []byte
 		setAttrIn  *SetAttrIn
 		setAttrOut *SetAttrOut
 	)
 
-	setAttrIn, err = unmarshalSetAttrIn(devFuseFDReadBufPayload)
-	if nil != err {
-		volume.logger.Printf("Call to doSetAttr() found %v", err)
+	if len(devFuseFDReadBufPayload) != SetAttrInSize {
+		volume.logger.Printf("Call to doSetAttr() with bad len(devFuseFDReadBufPayload) == %v", len(devFuseFDReadBufPayload))
 		volume.devFuseFDWriter(inHeader, syscall.EINVAL)
 		return
+	}
+
+	setAttrIn = &SetAttrIn{
+		Valid:     *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[0])),
+		Padding:   *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[4])),
+		FH:        *(*uint64)(unsafe.Pointer(&devFuseFDReadBufPayload[8])),
+		Size:      *(*uint64)(unsafe.Pointer(&devFuseFDReadBufPayload[16])),
+		LockOwner: *(*uint64)(unsafe.Pointer(&devFuseFDReadBufPayload[24])),
+		ATimeSec:  *(*uint64)(unsafe.Pointer(&devFuseFDReadBufPayload[32])),
+		MTimeSec:  *(*uint64)(unsafe.Pointer(&devFuseFDReadBufPayload[40])),
+		Unused2:   *(*uint64)(unsafe.Pointer(&devFuseFDReadBufPayload[48])),
+		ATimeNSec: *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[56])),
+		MTimeNSec: *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[60])),
+		Unused3:   *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[64])),
+		Mode:      *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[68])),
+		Unused4:   *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[72])),
+		UID:       *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[76])),
+		GID:       *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[80])),
+		Unused5:   *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[84])),
 	}
 
 	setAttrOut, errno = volume.callbacks.DoSetAttr(inHeader, setAttrIn)
@@ -578,14 +614,38 @@ func (volume *volumeStruct) doFSync(inHeader *InHeader, devFuseFDReadBufPayload 
 
 func (volume *volumeStruct) doSetXAttr(inHeader *InHeader, devFuseFDReadBufPayload []byte) {
 	var (
-		err        error
-		errno      syscall.Errno
-		setXAttrIn *SetXAttrIn
+		errno          syscall.Errno
+		nameDataSplit  [][]byte
+		setXAttrIn     *SetXAttrIn
+		setXAttrInSize int
 	)
 
-	setXAttrIn, err = unmarshalSetXAttrIn(devFuseFDReadBufPayload)
-	if nil != err {
-		volume.logger.Printf("Call to doSetXAttr() found %v", err)
+	if len(devFuseFDReadBufPayload) < SetXAttrInFixedPortionSize {
+		volume.logger.Printf("Call to doSetXAttr() with bad len(devFuseFDReadBufPayload) == %v", len(devFuseFDReadBufPayload))
+		volume.devFuseFDWriter(inHeader, syscall.EINVAL)
+		return
+	}
+
+	nameDataSplit = bytes.SplitN(devFuseFDReadBufPayload[SetXAttrInFixedPortionSize:], []byte{0}, 2)
+	if len(nameDataSplit) != 2 {
+		volume.logger.Printf("Call to doSetXAttr() with bad devFuseFDReadBufPayload")
+		volume.devFuseFDWriter(inHeader, syscall.EINVAL)
+		return
+	}
+
+	setXAttrIn = &SetXAttrIn{
+		Size:          *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[0])),
+		Flags:         *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[4])),
+		SetXAttrFlags: *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[8])),
+		Padding:       *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[12])),
+		Name:          cloneByteSlice(nameDataSplit[0], false),
+		Data:          cloneByteSlice(nameDataSplit[1], true),
+	}
+
+	setXAttrInSize = SetXAttrInFixedPortionSize + len(setXAttrIn.Name) + 1 + len(setXAttrIn.Data)
+
+	if len(devFuseFDReadBufPayload) != setXAttrInSize {
+		volume.logger.Printf("Call to doSetXAttr() with bad Size == %v expected %v", setXAttrIn.Size, setXAttrInSize)
 		volume.devFuseFDWriter(inHeader, syscall.EINVAL)
 		return
 	}
@@ -597,18 +657,22 @@ func (volume *volumeStruct) doSetXAttr(inHeader *InHeader, devFuseFDReadBufPaylo
 
 func (volume *volumeStruct) doGetXAttr(inHeader *InHeader, devFuseFDReadBufPayload []byte) {
 	var (
-		err         error
 		errno       syscall.Errno
 		getXAttrIn  *GetXAttrIn
 		getXAttrOut *GetXAttrOut
 		outPayload  []byte
 	)
 
-	getXAttrIn, err = unmarshalGetXAttrIn(devFuseFDReadBufPayload)
-	if nil != err {
-		volume.logger.Printf("Call to doGetXAttr() found %v", err)
+	if len(devFuseFDReadBufPayload) < GetXAttrInFixedPortionSize {
+		volume.logger.Printf("Call to doGetXAttr() with bad len(devFuseFDReadBufPayload) == %v", len(devFuseFDReadBufPayload))
 		volume.devFuseFDWriter(inHeader, syscall.EINVAL)
 		return
+	}
+
+	getXAttrIn = &GetXAttrIn{
+		Size:    *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[0])),
+		Padding: *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[4])),
+		Name:    cloneByteSlice(devFuseFDReadBufPayload[GetXAttrInFixedPortionSize:], true),
 	}
 
 	getXAttrOut, errno = volume.callbacks.DoGetXAttr(inHeader, getXAttrIn)
@@ -732,17 +796,80 @@ func (volume *volumeStruct) doInit(inHeader *InHeader, devFuseFDReadBufPayload [
 		outPayload []byte
 	)
 
-	if len(devFuseFDReadBufPayload) != InitInSize {
+	defer volume.doInitWG.Done()
+
+	if len(devFuseFDReadBufPayload) < InitInMinSize {
 		volume.logger.Printf("Call to doInit() with bad len(devFuseFDReadBufPayload) == %v", len(devFuseFDReadBufPayload))
 		volume.devFuseFDWriter(inHeader, syscall.EINVAL)
 		return
 	}
 
-	initIn = &InitIn{
-		Major:        *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[0])),
-		Minor:        *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[4])),
-		MaxReadAhead: *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[8])),
-		Flags:        *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[12])),
+	volume.fuseMajor = *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[0]))
+	volume.fuseMinor = *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[4]))
+
+	if volume.fuseMajor != 7 {
+		volume.logger.Printf("Call to doInit() with bad InitIn.Major == %v [must be 7]", volume.fuseMajor)
+		volume.devFuseFDWriter(inHeader, syscall.EINVAL)
+		return
+	}
+
+	switch {
+	case volume.fuseMinor == 17:
+		if len(devFuseFDReadBufPayload) != InitInUpThru735Size {
+			volume.logger.Printf("Call to doInit() with bad len(devFuseFDReadBufPayload) == %v", len(devFuseFDReadBufPayload))
+			volume.devFuseFDWriter(inHeader, syscall.EINVAL)
+			return
+		}
+		initIn = &InitIn{
+			Major:        volume.fuseMajor,
+			Minor:        volume.fuseMinor,
+			MaxReadAhead: *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[8])),
+			Flags:        *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[12])),
+			Flags2:       0,
+		}
+	case (volume.fuseMinor >= 21) && (volume.fuseMinor <= 30):
+		if len(devFuseFDReadBufPayload) != InitInUpThru735Size {
+			volume.logger.Printf("Call to doInit() with bad len(devFuseFDReadBufPayload) == %v", len(devFuseFDReadBufPayload))
+			volume.devFuseFDWriter(inHeader, syscall.EINVAL)
+			return
+		}
+		initIn = &InitIn{
+			Major:        volume.fuseMajor,
+			Minor:        volume.fuseMinor,
+			MaxReadAhead: *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[8])),
+			Flags:        *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[12])),
+			Flags2:       0,
+		}
+	case (volume.fuseMinor >= 32) && (volume.fuseMinor <= 35):
+		if len(devFuseFDReadBufPayload) != InitInUpThru735Size {
+			volume.logger.Printf("Call to doInit() with bad len(devFuseFDReadBufPayload) == %v", len(devFuseFDReadBufPayload))
+			volume.devFuseFDWriter(inHeader, syscall.EINVAL)
+			return
+		}
+		initIn = &InitIn{
+			Major:        volume.fuseMajor,
+			Minor:        volume.fuseMinor,
+			MaxReadAhead: *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[8])),
+			Flags:        *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[12])),
+			Flags2:       0,
+		}
+	case volume.fuseMinor >= 36:
+		if len(devFuseFDReadBufPayload) != InitInFrom736OnSize {
+			volume.logger.Printf("Call to doInit() with bad len(devFuseFDReadBufPayload) == %v", len(devFuseFDReadBufPayload))
+			volume.devFuseFDWriter(inHeader, syscall.EINVAL)
+			return
+		}
+		initIn = &InitIn{
+			Major:        volume.fuseMajor,
+			Minor:        volume.fuseMinor,
+			MaxReadAhead: *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[8])),
+			Flags:        *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[12])),
+			Flags2:       *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[16])),
+		}
+	default:
+		volume.logger.Printf("Call to doInit() with bad InitIn.Minor == %v [must be >= 17 but not 18-20 or 31]", volume.fuseMinor)
+		volume.devFuseFDWriter(inHeader, syscall.EINVAL)
+		return
 	}
 
 	initOut, errno = volume.callbacks.DoInit(inHeader, initIn)
@@ -752,30 +879,123 @@ func (volume *volumeStruct) doInit(inHeader *InHeader, devFuseFDReadBufPayload [
 		return
 	}
 
-	outPayload = make([]byte, InitOutSize)
-
-	*(*uint32)(unsafe.Pointer(&outPayload[0])) = initOut.Major
-	*(*uint32)(unsafe.Pointer(&outPayload[4])) = initOut.Minor
-	*(*uint32)(unsafe.Pointer(&outPayload[8])) = initOut.MaxReadAhead
-	*(*uint32)(unsafe.Pointer(&outPayload[12])) = initOut.Flags
-	*(*uint16)(unsafe.Pointer(&outPayload[16])) = initOut.MaxBackground
-	*(*uint16)(unsafe.Pointer(&outPayload[18])) = initOut.CongestionThreshhold
-	*(*uint32)(unsafe.Pointer(&outPayload[20])) = initOut.MaxWrite
-	*(*uint32)(unsafe.Pointer(&outPayload[24])) = initOut.TimeGran
-	*(*uint16)(unsafe.Pointer(&outPayload[28])) = initOut.MaxPages
-	*(*uint16)(unsafe.Pointer(&outPayload[30])) = initOut.Padding
-	*(*uint32)(unsafe.Pointer(&outPayload[32])) = initOut.Unused[0]
-	*(*uint32)(unsafe.Pointer(&outPayload[36])) = initOut.Unused[1]
-	*(*uint32)(unsafe.Pointer(&outPayload[40])) = initOut.Unused[2]
-	*(*uint32)(unsafe.Pointer(&outPayload[44])) = initOut.Unused[3]
-	*(*uint32)(unsafe.Pointer(&outPayload[48])) = initOut.Unused[4]
-	*(*uint32)(unsafe.Pointer(&outPayload[52])) = initOut.Unused[5]
-	*(*uint32)(unsafe.Pointer(&outPayload[56])) = initOut.Unused[6]
-	*(*uint32)(unsafe.Pointer(&outPayload[60])) = initOut.Unused[7]
-
-	if (initOut.Major < 7) || ((initOut.Major == 7) && (initOut.Minor < 28)) {
-		outPayload = outPayload[:InitOutSizePre_7_28]
+	if initOut.Major != 7 {
+		volume.logger.Printf("Call to doInit() with bad InitOut.Major == %v [must be 7]", initOut.Major)
+		volume.devFuseFDWriter(inHeader, syscall.EINVAL)
+		return
 	}
+
+	switch {
+	case initOut.Minor == 17:
+		outPayload = make([]byte, InitOut717Size)
+
+		*(*uint32)(unsafe.Pointer(&outPayload[0])) = initOut.Major
+		*(*uint32)(unsafe.Pointer(&outPayload[4])) = initOut.Minor
+		*(*uint32)(unsafe.Pointer(&outPayload[8])) = initOut.MaxReadAhead
+		*(*uint32)(unsafe.Pointer(&outPayload[12])) = initOut.Flags
+		*(*uint16)(unsafe.Pointer(&outPayload[16])) = initOut.MaxBackground
+		*(*uint16)(unsafe.Pointer(&outPayload[18])) = initOut.CongestionThreshhold
+		*(*uint32)(unsafe.Pointer(&outPayload[20])) = initOut.MaxWrite
+	case (initOut.Minor >= 21) && (initOut.Minor <= 22):
+		outPayload = make([]byte, InitOut721Thru722Size)
+
+		*(*uint32)(unsafe.Pointer(&outPayload[0])) = initOut.Major
+		*(*uint32)(unsafe.Pointer(&outPayload[4])) = initOut.Minor
+		*(*uint32)(unsafe.Pointer(&outPayload[8])) = initOut.MaxReadAhead
+		*(*uint32)(unsafe.Pointer(&outPayload[12])) = initOut.Flags
+		*(*uint16)(unsafe.Pointer(&outPayload[16])) = initOut.MaxBackground
+		*(*uint16)(unsafe.Pointer(&outPayload[18])) = initOut.CongestionThreshhold
+		*(*uint32)(unsafe.Pointer(&outPayload[20])) = initOut.MaxWrite
+	case (initOut.Minor >= 23) && (initOut.Minor <= 27):
+		outPayload = make([]byte, InitOut723Thru727Size)
+
+		*(*uint32)(unsafe.Pointer(&outPayload[0])) = initOut.Major
+		*(*uint32)(unsafe.Pointer(&outPayload[4])) = initOut.Minor
+		*(*uint32)(unsafe.Pointer(&outPayload[8])) = initOut.MaxReadAhead
+		*(*uint32)(unsafe.Pointer(&outPayload[12])) = initOut.Flags
+		*(*uint16)(unsafe.Pointer(&outPayload[16])) = initOut.MaxBackground
+		*(*uint16)(unsafe.Pointer(&outPayload[18])) = initOut.CongestionThreshhold
+		*(*uint32)(unsafe.Pointer(&outPayload[20])) = initOut.MaxWrite
+		*(*uint32)(unsafe.Pointer(&outPayload[24])) = initOut.TimeGran
+		*(*uint32)(unsafe.Pointer(&outPayload[28])) = 0
+		*(*uint32)(unsafe.Pointer(&outPayload[32])) = 0
+		*(*uint32)(unsafe.Pointer(&outPayload[36])) = 0
+		*(*uint32)(unsafe.Pointer(&outPayload[40])) = 0
+		*(*uint32)(unsafe.Pointer(&outPayload[44])) = 0
+		*(*uint32)(unsafe.Pointer(&outPayload[48])) = 0
+		*(*uint32)(unsafe.Pointer(&outPayload[52])) = 0
+		*(*uint32)(unsafe.Pointer(&outPayload[56])) = 0
+		*(*uint32)(unsafe.Pointer(&outPayload[60])) = 0
+	case (initOut.Minor >= 28) && (initOut.Minor <= 30):
+		outPayload = make([]byte, InitOut728Thru731aSize)
+
+		*(*uint32)(unsafe.Pointer(&outPayload[0])) = initOut.Major
+		*(*uint32)(unsafe.Pointer(&outPayload[4])) = initOut.Minor
+		*(*uint32)(unsafe.Pointer(&outPayload[8])) = initOut.MaxReadAhead
+		*(*uint32)(unsafe.Pointer(&outPayload[12])) = initOut.Flags
+		*(*uint16)(unsafe.Pointer(&outPayload[16])) = initOut.MaxBackground
+		*(*uint16)(unsafe.Pointer(&outPayload[18])) = initOut.CongestionThreshhold
+		*(*uint32)(unsafe.Pointer(&outPayload[20])) = initOut.MaxWrite
+		*(*uint32)(unsafe.Pointer(&outPayload[24])) = initOut.TimeGran
+		*(*uint16)(unsafe.Pointer(&outPayload[28])) = initOut.MaxPages
+		*(*uint16)(unsafe.Pointer(&outPayload[30])) = 0
+		*(*uint32)(unsafe.Pointer(&outPayload[32])) = 0
+		*(*uint32)(unsafe.Pointer(&outPayload[36])) = 0
+		*(*uint32)(unsafe.Pointer(&outPayload[40])) = 0
+		*(*uint32)(unsafe.Pointer(&outPayload[44])) = 0
+		*(*uint32)(unsafe.Pointer(&outPayload[48])) = 0
+		*(*uint32)(unsafe.Pointer(&outPayload[52])) = 0
+		*(*uint32)(unsafe.Pointer(&outPayload[56])) = 0
+		*(*uint32)(unsafe.Pointer(&outPayload[60])) = 0
+	case (initOut.Minor >= 32) && (initOut.Minor <= 35):
+		outPayload = make([]byte, InitOut731bThru735Size)
+
+		*(*uint32)(unsafe.Pointer(&outPayload[0])) = initOut.Major
+		*(*uint32)(unsafe.Pointer(&outPayload[4])) = initOut.Minor
+		*(*uint32)(unsafe.Pointer(&outPayload[8])) = initOut.MaxReadAhead
+		*(*uint32)(unsafe.Pointer(&outPayload[12])) = initOut.Flags
+		*(*uint16)(unsafe.Pointer(&outPayload[16])) = initOut.MaxBackground
+		*(*uint16)(unsafe.Pointer(&outPayload[18])) = initOut.CongestionThreshhold
+		*(*uint32)(unsafe.Pointer(&outPayload[20])) = initOut.MaxWrite
+		*(*uint32)(unsafe.Pointer(&outPayload[24])) = initOut.TimeGran
+		*(*uint16)(unsafe.Pointer(&outPayload[28])) = initOut.MaxPages
+		*(*uint16)(unsafe.Pointer(&outPayload[30])) = initOut.MapAlignment
+		*(*uint32)(unsafe.Pointer(&outPayload[32])) = 0
+		*(*uint32)(unsafe.Pointer(&outPayload[36])) = 0
+		*(*uint32)(unsafe.Pointer(&outPayload[40])) = 0
+		*(*uint32)(unsafe.Pointer(&outPayload[44])) = 0
+		*(*uint32)(unsafe.Pointer(&outPayload[48])) = 0
+		*(*uint32)(unsafe.Pointer(&outPayload[52])) = 0
+		*(*uint32)(unsafe.Pointer(&outPayload[56])) = 0
+		*(*uint32)(unsafe.Pointer(&outPayload[60])) = 0
+	case initOut.Minor >= 36:
+		outPayload = make([]byte, InitOut736AndBeyondSize)
+
+		*(*uint32)(unsafe.Pointer(&outPayload[0])) = initOut.Major
+		*(*uint32)(unsafe.Pointer(&outPayload[4])) = initOut.Minor
+		*(*uint32)(unsafe.Pointer(&outPayload[8])) = initOut.MaxReadAhead
+		*(*uint32)(unsafe.Pointer(&outPayload[12])) = initOut.Flags
+		*(*uint16)(unsafe.Pointer(&outPayload[16])) = initOut.MaxBackground
+		*(*uint16)(unsafe.Pointer(&outPayload[18])) = initOut.CongestionThreshhold
+		*(*uint32)(unsafe.Pointer(&outPayload[20])) = initOut.MaxWrite
+		*(*uint32)(unsafe.Pointer(&outPayload[24])) = initOut.TimeGran
+		*(*uint16)(unsafe.Pointer(&outPayload[28])) = initOut.MaxPages
+		*(*uint16)(unsafe.Pointer(&outPayload[30])) = initOut.MapAlignment
+		*(*uint32)(unsafe.Pointer(&outPayload[32])) = initOut.Flags2
+		*(*uint32)(unsafe.Pointer(&outPayload[36])) = 0
+		*(*uint32)(unsafe.Pointer(&outPayload[40])) = 0
+		*(*uint32)(unsafe.Pointer(&outPayload[44])) = 0
+		*(*uint32)(unsafe.Pointer(&outPayload[48])) = 0
+		*(*uint32)(unsafe.Pointer(&outPayload[52])) = 0
+		*(*uint32)(unsafe.Pointer(&outPayload[56])) = 0
+		*(*uint32)(unsafe.Pointer(&outPayload[60])) = 0
+	default:
+		volume.logger.Printf("Call to doInit() with bad InitOut.Minor == %v [must be >= 17 but not 18-20 or 31]", initOut.Minor)
+		volume.devFuseFDWriter(inHeader, syscall.EINVAL)
+		return
+	}
+
+	volume.fuseMinor = initOut.Minor // just in case volume.callbacks.DoInit() changed it...
 
 	volume.devFuseFDWriter(inHeader, 0, outPayload)
 }
@@ -854,7 +1074,7 @@ func (volume *volumeStruct) doReadDir(inHeader *InHeader, devFuseFDReadBufPayloa
 
 	outPayloadOffset = 0
 
-	for dirEntIndex = 0; dirEntIndex < len(readDirOut.DirEnt); dirEntIndex++ {
+	for dirEntIndex = range len(readDirOut.DirEnt) {
 		dirEnt = &readDirOut.DirEnt[dirEntIndex]
 
 		nameLenAligned = (uint32(len(dirEnt.Name)) + (DirEntAlignment - 1)) & ^uint32(DirEntAlignment-1)
@@ -1243,7 +1463,7 @@ func (volume *volumeStruct) doBatchForget(inHeader *InHeader, devFuseFDReadBufPa
 
 	batchForgetInOffset = BatchForgetInFixedPortionSize
 
-	for batchForgetInForgetIndex = 0; batchForgetInForgetIndex < batchForgetIn.Count; batchForgetInForgetIndex++ {
+	for batchForgetInForgetIndex = range batchForgetIn.Count {
 		batchForgetIn.Forget[batchForgetInForgetIndex] = ForgetOne{
 			NodeID:  *(*uint64)(unsafe.Pointer(&devFuseFDReadBufPayload[batchForgetInOffset+0])),
 			NLookup: *(*uint64)(unsafe.Pointer(&devFuseFDReadBufPayload[batchForgetInOffset+8])),
@@ -1318,7 +1538,7 @@ func (volume *volumeStruct) doReadDirPlus(inHeader *InHeader, devFuseFDReadBufPa
 
 	outPayloadOffset = 0
 
-	for dirEntPlusIndex = 0; dirEntPlusIndex < len(readDirPlusOut.DirEntPlus); dirEntPlusIndex++ {
+	for dirEntPlusIndex = range len(readDirPlusOut.DirEntPlus) {
 		dirEntPlus = &readDirPlusOut.DirEntPlus[dirEntPlusIndex]
 
 		nameLenAligned = (uint32(len(dirEntPlus.Name)) + (DirEntAlignment - 1)) & ^uint32(DirEntAlignment-1)

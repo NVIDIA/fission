@@ -1,4 +1,4 @@
-// Copyright (c) 2015-2021, NVIDIA CORPORATION.
+// Copyright (c) 2015-2025, NVIDIA CORPORATION.
 // SPDX-License-Identifier: Apache-2.0
 
 package fission
@@ -88,13 +88,68 @@ type Callbacks interface {
 // users access to the mount point. A chan error is also supplied to enable the Volume to indicate
 // that it is no longer servicing FUSE upcalls (e.g. as a result of an intentional DoUnmount() call
 // or some unexpected error reading from /dev/fuse).
-func NewVolume(volumeName string, mountpointDirPath string, fuseSubtype string, maxRead uint32, maxWrite uint32, defaultPermissions bool, allowOther bool, callbacks Callbacks, logger *log.Logger, errChan chan error) (volume Volume) {
+func NewVolume(volumeName, mountpointDirPath, fuseSubtype string, maxRead, maxWrite uint32, defaultPermissions, allowOther bool, callbacks Callbacks, logger *log.Logger, errChan chan error) (volume Volume) {
 	volume = newVolume(volumeName, mountpointDirPath, fuseSubtype, maxRead, maxWrite, defaultPermissions, allowOther, callbacks, logger, errChan)
 	return
 }
 
-// See api_{darwin|linux}.go for const AttrSize
-// See api_{darwin|linux}.go for type Attr struct
+// Linux Kernel to FUSE version mapping:
+//   1) note that distributions may modify this mapping)
+//   2) only kernel releases (i.e. vX.YY) are displayed here...
+//   3) ...starting with v3.1
+//   4) ...and skipping versions that didn't change fuse.h version
+//   5) kernels up thru v3.6   have fuse.h in include/linux/
+//   6) kernels at v3.7 and up have fuse.h in include/uapi/linux/
+//
+// Kernel    FUSE
+// ------    ----
+//  3.1      7.17
+//  3.3      7.18
+//  3.5      7.19
+//  3.6      7.20   [Note: here and above, fuse.h in include/linux/     ]
+//  3.9      7.21   [Note: here and below, fuse.h in include/uapi/linux/]
+//  3.10     7.22
+//  3.15     7.23
+//  4.5      7.24
+//  4.7      7.25
+//  4.9      7.26
+//  4.18     7.27
+//  4.20     7.28
+//  5.1      7.29
+//  5.2      7.31a  [Note: fuse_init_out had a uint16_t field named "padding"      ]
+//  5.4      7.31b  [      that in this kernel version named it     "map_alignment"]
+//  5.10     7.32
+//  5.11     7.33
+//  5.14     7.34
+//  5.16     7.35
+//  5.17     7.36
+//  6.1      7.37
+//  6.2      7.38
+//  6.6      7.39
+//  6.9      7.40
+//  6.12     7.41
+//  6.14     7.42
+
+const AttrSize = 88
+
+type Attr struct {
+	Ino       uint64
+	Size      uint64
+	Blocks    uint64
+	ATimeSec  uint64
+	MTimeSec  uint64
+	CTimeSec  uint64
+	ATimeNSec uint32
+	MTimeNSec uint32
+	CTimeNSec uint32
+	Mode      uint32
+	NLink     uint32
+	UID       uint32
+	GID       uint32
+	RDev      uint32
+	BlkSize   uint32
+	Padding   uint32
+}
 
 const KStatFSSize = 80
 
@@ -121,22 +176,18 @@ type FileLock struct {
 }
 
 const (
-	SetAttrInValidMode      = uint32(1) << 0
-	SetAttrInValidUID       = uint32(1) << 1
-	SetAttrInValidGID       = uint32(1) << 2
-	SetAttrInValidSize      = uint32(1) << 3
-	SetAttrInValidATime     = uint32(1) << 4
-	SetAttrInValidMTime     = uint32(1) << 5
-	SetAttrInValidFH        = uint32(1) << 6
-	SetAttrInValidATimeNow  = uint32(1) << 7
-	SetAttrInValidMTimeNow  = uint32(1) << 8
-	SetAttrInValidLockOwner = uint32(1) << 9
-	SetAttrInValidCTime     = uint32(1) << 10 // not supported
-
-	SetAttrInValidCrTime   = uint32(1) << 28 // darwin only
-	SetAttrInValidChgTime  = uint32(1) << 29 // darwin only
-	SetAttrInValidBkupTime = uint32(1) << 30 // darwin only
-	SetAttrInValidFlags    = uint32(1) << 31 // darwin only
+	SetAttrInValidMode        = uint32(1) << 0
+	SetAttrInValidUID         = uint32(1) << 1
+	SetAttrInValidGID         = uint32(1) << 2
+	SetAttrInValidSize        = uint32(1) << 3
+	SetAttrInValidATime       = uint32(1) << 4
+	SetAttrInValidMTime       = uint32(1) << 5
+	SetAttrInValidFH          = uint32(1) << 6
+	SetAttrInValidATimeNow    = uint32(1) << 7
+	SetAttrInValidMTimeNow    = uint32(1) << 8
+	SetAttrInValidLockOwner   = uint32(1) << 9
+	SetAttrInValidCTime       = uint32(1) << 10 // not supported
+	SetAttrInValidKillSuidGID = uint32(1) << 11 // not supported
 )
 
 const (
@@ -191,10 +242,15 @@ const (
 	InitFlagsNoOpendirSupport  = uint32(1) << 24
 	InitFlagsExplicitInvalData = uint32(1) << 25
 	InitFlagsMapAlignment      = uint32(1) << 26
+	InitFlagsSubMounts         = uint32(1) << 27
+	InitFlagsHandleKillprivV2  = uint32(1) << 28
+	InitFlagsSetXattrExt       = uint32(1) << 29
+	InitFalgsInitExt           = uint32(1) << 30
+	InitFlagsInitReserved      = uint32(1) << 31
 
-	InitFlagsCaseSensitive = uint32(1) << 29 // darwin only
-	InitFlagsVolRename     = uint32(1) << 30 // darwin only
-	InitFlagsXtimes        = uint32(1) << 31 // darwin only
+	InitFlags2SecurityCtx     = uint32(1) << 0
+	InitFlags2HasInodeDAX     = uint32(1) << 1
+	InitFlags2CreateSuppGroup = uint32(1) << 2
 )
 
 const (
@@ -344,6 +400,8 @@ const (
 	OpCodeCopyFileRange = uint32(47) // unsupported
 	OpCodeSetupMapping  = uint32(48) // unsupported
 	OpCodeRemoveMapping = uint32(49) // unsupported
+	OpCodeSyncFS        = uint32(50) // unsupported
+	OpCodeTmpFile       = uint32(51) // unsupported
 
 	OpCodeCuseInit = uint32(4096) // unsupported
 )
@@ -402,8 +460,26 @@ type GetAttrOut struct {
 	Attr
 }
 
-// See api_{darwin|linux}.go for const SetAttrInSize
-// See api_{darwin|linux}.go for type SetAttrIn struct
+const SetAttrInSize = 88
+
+type SetAttrIn struct {
+	Valid     uint32 // mask of const SetAttrInValid* bits
+	Padding   uint32
+	FH        uint64
+	Size      uint64
+	LockOwner uint64
+	ATimeSec  uint64
+	MTimeSec  uint64
+	Unused2   uint64
+	ATimeNSec uint32
+	MTimeNSec uint32
+	Unused3   uint32
+	Mode      uint32
+	Unused4   uint32
+	UID       uint32
+	GID       uint32
+	Unused5   uint32
+}
 
 const SetAttrOutSize = 16 + AttrSize
 
@@ -562,25 +638,23 @@ type FSyncIn struct {
 	Padding    uint32
 }
 
-// See api_{darwin|linux}.go for const SetXAttrInFixedPortionSize
+const SetXAttrInFixedPortionSize = 16 // + len(Name) + 1 + len(Data)
 
 type SetXAttrIn struct {
-	Size     uint32 // == len(Name) + 1 + len(Data)
-	Flags    uint32 // if not 0, either of SetXAttrIn*
-	Position uint32 // darwin only - set to zero otherwise
-	Padding  uint32 // darwin only
-	Name     []byte
-	Data     []byte // byte(0) separated from Name
+	Size          uint32 // == len(Name) + 1 + len(Data)
+	Flags         uint32 // if not 0, either of SetXAttrIn*
+	SetXAttrFlags uint32
+	Padding       uint32
+	Name          []byte
+	Data          []byte // byte(0) separated from Name
 }
 
-// See api_{darwin|linux}.go for const GetXAttrInFixedPortionSize
+const GetXAttrInFixedPortionSize = 8 // + len(Name)
 
 type GetXAttrIn struct {
-	Size     uint32 // == max len(GetXAttrOut.Data)
-	Padding  uint32
-	Position uint32 // darwin only - set to zero otherwise
-	Padding2 uint32 // darwin only
-	Name     []byte
+	Size    uint32 // == max len(GetXAttrOut.Data)
+	Padding uint32
+	Name    []byte
 }
 
 const GetXAttrOutSizeOnlySize = 8
@@ -591,12 +665,11 @@ type GetXAttrOut struct {
 	Data    []byte // only returned if GetXAttrIn.Size != 0
 }
 
-// See api_{darwin|linux}.go for const ListXAttrInSize
+const ListXAttrInSize = 8
 
 type ListXAttrIn struct {
-	Size     uint32 // == max len(ListXAttrOut.Name) with a '\0' between each Name element
-	Padding  uint32
-	Padding2 uint64 // darwin only
+	Size    uint32 // == max len(ListXAttrOut.Name) with a '\0' between each Name element
+	Padding uint32
 }
 
 const ListXAttrOutSizeOnlySize = 8
@@ -620,16 +693,146 @@ type FlushIn struct {
 	LockOwner uint64
 }
 
-const InitInSize = 16
+const InitInMinSize = 8
 
-type InitIn struct {
+type InitInMin struct {
+	Major uint32
+	Minor uint32
+}
+
+const InitInUpThru735Size = 16
+
+type InitInUpThru735 struct {
 	Major        uint32
 	Minor        uint32
 	MaxReadAhead uint32
 	Flags        uint32 // mask of const InitFlags* bits
 }
 
-const InitOutSizePre_7_28 = 24
+const InitInFrom736OnSize = 64
+
+type InitInFrom736On struct {
+	Major        uint32
+	Minor        uint32
+	MaxReadAhead uint32
+	Flags        uint32 // mask of const InitFlags* bits
+	Flags2       uint32 // mask of const InitFlags2* bits
+	Unused       [11]uint32
+}
+
+const InitInSize = 64
+
+type InitIn struct {
+	Major        uint32
+	Minor        uint32
+	MaxReadAhead uint32
+	Flags        uint32 // mask of const InitFlags* bits
+	Flags2       uint32 // mask of const InitFlags2* bits
+	Unused       [11]uint32
+}
+
+const InitOut717Size = 24
+
+type InitOut717 struct {
+	Major                uint32
+	Minor                uint32
+	MaxReadAhead         uint32
+	Flags                uint32 // mask of const InitFlags* bits
+	MaxBackground        uint16
+	CongestionThreshhold uint16
+	MaxWrite             uint32
+}
+
+const InitOut718Thru720Size = 72
+
+type InitOut718Thru720 struct {
+	Major                uint32
+	Minor                uint32
+	MaxReadAhead         uint32
+	Flags                uint32 // mask of const InitFlags* bits
+	MaxBackground        uint16
+	CongestionThreshhold uint16
+	MaxWrite             uint32
+	DevMajor             uint32
+	DevMinor             uint32
+	Spare                [10]uint32
+}
+
+const InitOut721Thru722Size = 24
+
+type InitOut721Thru722 struct {
+	Major                uint32
+	Minor                uint32
+	MaxReadAhead         uint32
+	Flags                uint32 // mask of const InitFlags* bits
+	MaxBackground        uint16
+	CongestionThreshhold uint16
+	MaxWrite             uint32
+}
+
+const InitOut723Thru727Size = 64
+
+type InitOut723Thru727 struct {
+	Major                uint32
+	Minor                uint32
+	MaxReadAhead         uint32
+	Flags                uint32 // mask of const InitFlags* bits
+	MaxBackground        uint16
+	CongestionThreshhold uint16
+	MaxWrite             uint32
+	TimeGran             uint32
+	Spare                [9]uint32
+}
+
+const InitOut728Thru731aSize = 64
+
+type InitOut728Thru731a struct {
+	Major                uint32
+	Minor                uint32
+	MaxReadAhead         uint32
+	Flags                uint32 // mask of const InitFlags* bits
+	MaxBackground        uint16
+	CongestionThreshhold uint16
+	MaxWrite             uint32
+	TimeGran             uint32
+	MaxPages             uint16
+	Padding              uint16
+	Spare                [8]uint32
+}
+
+const InitOut731bThru735Size = 64
+
+type InitOut731bThru735 struct {
+	Major                uint32
+	Minor                uint32
+	MaxReadAhead         uint32
+	Flags                uint32 // mask of const InitFlags* bits
+	MaxBackground        uint16
+	CongestionThreshhold uint16
+	MaxWrite             uint32
+	TimeGran             uint32
+	MaxPages             uint16
+	MapAlignment         uint16
+	Spare                [8]uint32
+}
+
+const InitOut736AndBeyondSize = 64
+
+type InitOut736AndBeyond struct {
+	Major                uint32
+	Minor                uint32
+	MaxReadAhead         uint32
+	Flags                uint32 // mask of const InitFlags* bits
+	MaxBackground        uint16
+	CongestionThreshhold uint16
+	MaxWrite             uint32
+	TimeGran             uint32
+	MaxPages             uint16
+	MapAlignment         uint16
+	Flags2               uint32
+	Unused               [7]uint32
+}
+
 const InitOutSize = 64
 
 type InitOut struct {
@@ -640,10 +843,11 @@ type InitOut struct {
 	MaxBackground        uint16
 	CongestionThreshhold uint16
 	MaxWrite             uint32
-	TimeGran             uint32    // starting at 7.28
-	MaxPages             uint16    // starting at 7.28
-	Padding              uint16    // starting at 7.28
-	Unused               [8]uint32 // starting at 7.28
+	TimeGran             uint32
+	MaxPages             uint16
+	MapAlignment         uint16
+	Flags2               uint32
+	Unused               [7]uint32
 }
 
 const OpenDirInSize = 8

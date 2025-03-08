@@ -1,4 +1,4 @@
-// Copyright (c) 2015-2021, NVIDIA CORPORATION.
+// Copyright (c) 2015-2025, NVIDIA CORPORATION.
 // SPDX-License-Identifier: Apache-2.0
 
 package main
@@ -6,18 +6,17 @@ package main
 import (
 	"fmt"
 	"log"
-	"math/rand"
+	"math/rand/v2"
 	"os"
 	"os/signal"
 	"path"
+	"strconv"
 	"syscall"
 	"time"
 
-	"golang.org/x/sys/unix"
-
-	"github.com/NVIDIA/sortedmap"
-
 	"github.com/NVIDIA/fission"
+	"github.com/NVIDIA/sortedmap"
+	"golang.org/x/sys/unix"
 )
 
 const (
@@ -50,8 +49,8 @@ const (
 	attrValidSec  = uint64(10)
 	attrValidNSec = uint32(0)
 
-	tryLockBackoffMin = time.Duration(time.Second) // time.Duration(100 * time.Microsecond)
-	tryLockBackoffMax = time.Duration(time.Second) // time.Duration(300 * time.Microsecond)
+	tryLockBackoffMin = 100 * time.Microsecond
+	tryLockBackoffMax = 300 * time.Microsecond
 
 	accessROK = syscall.S_IROTH // surprisingly not defined as syscall.R_OK
 	accessWOK = syscall.S_IWOTH // surprisingly not defined as syscall.W_OK
@@ -117,7 +116,7 @@ func main() {
 		unixTimeNowSec  uint64
 	)
 
-	if 2 != len(os.Args) {
+	if len(os.Args) != 2 {
 		fmt.Printf("Usage: %s <mount_point>\n", os.Args[0])
 		os.Exit(0)
 	}
@@ -165,7 +164,7 @@ func main() {
 	fixAttrSizes(&rootInode.attr)
 
 	ok, err = rootInode.dirEntryMap.Put([]byte("."), uint64(1))
-	if nil != err {
+	if err != nil {
 		globals.logger.Printf("rootInode.dirEntryMap.Put([]byte(\".\"), uint64(1)) failed: %v", err)
 		os.Exit(1)
 	}
@@ -174,7 +173,7 @@ func main() {
 		os.Exit(1)
 	}
 	ok, err = rootInode.dirEntryMap.Put([]byte(".."), uint64(1))
-	if nil != err {
+	if err != nil {
 		globals.logger.Printf("rootInode.dirEntryMap.Put([]byte(\"..\"), uint64(1)) failed: %v", err)
 		os.Exit(1)
 	}
@@ -198,7 +197,7 @@ func main() {
 	globals.volume = fission.NewVolume(globals.volumeName, globals.mountPoint, fuseSubtype, maxRead, maxWrite, false, false, &globals, globals.logger, globals.errChan)
 
 	err = globals.volume.DoMount()
-	if nil != err {
+	if err != nil {
 		globals.logger.Printf("fission.DoMount() failed: %v", err)
 		os.Exit(1)
 	}
@@ -207,7 +206,7 @@ func main() {
 	signal.Notify(signalChan, unix.SIGINT, unix.SIGTERM, unix.SIGHUP)
 
 	select {
-	case _ = <-signalChan:
+	case <-signalChan:
 		// Normal termination due to one of the above registered signals
 	case err = <-globals.errChan:
 		// Unexpected exit of /dev/fuse read loop since it's before we call DoUnmount()
@@ -215,7 +214,7 @@ func main() {
 	}
 
 	err = globals.volume.DoUnmount()
-	if nil != err {
+	if err != nil {
 		globals.logger.Printf("fission.DoUnmount() failed: %v", err)
 		os.Exit(1)
 	}
@@ -246,7 +245,7 @@ func (grantedLockSet *grantedLockSetStruct) get(tryLock *tryLockStruct) {
 		return
 	}
 
-	_ = <-tryLock.lockChan
+	<-tryLock.lockChan
 
 	grantedLockSet.set[tryLock] = 1
 }
@@ -267,7 +266,7 @@ func (grantedLockSet *grantedLockSetStruct) try(tryLock *tryLockStruct) (granted
 	}
 
 	select {
-	case _ = <-tryLock.lockChan:
+	case <-tryLock.lockChan:
 		granted = true
 		grantedLockSet.set[tryLock] = 1
 	default:
@@ -279,14 +278,12 @@ func (grantedLockSet *grantedLockSetStruct) try(tryLock *tryLockStruct) (granted
 
 func (grantedLockSet *grantedLockSetStruct) free(tryLock *tryLockStruct) {
 	var (
-		lockCount uint64
+		lockCount = grantedLockSet.set[tryLock]
 	)
-
-	lockCount = grantedLockSet.set[tryLock]
 
 	lockCount--
 
-	if 0 == lockCount {
+	if lockCount == 0 {
 		tryLock.lockChan <- struct{}{}
 		delete(grantedLockSet.set, tryLock)
 	} else {
@@ -306,21 +303,15 @@ func (grantedLockSet *grantedLockSetStruct) freeAll(andDelay bool) {
 	}
 
 	if andDelay {
-		tryLockBackoff = tryLockBackoffMin + time.Duration(rand.Int63n(int64(tryLockBackoffMax)-int64(tryLockBackoffMin)+1))
+		tryLockBackoff = tryLockBackoffMin + time.Duration(rand.Uint64N(uint64(tryLockBackoffMax)-uint64(tryLockBackoffMin)+1))
 		time.Sleep(tryLockBackoff)
 	}
 }
 
-func unixTimeToGoTime(unixTimeSec uint64, unixTimeNSec uint32) (goTime time.Time) {
-	goTime = time.Unix(int64(unixTimeSec), int64(unixTimeNSec))
-	return
-}
-
 func goTimeToUnixTime(goTime time.Time) (unixTimeSec uint64, unixTimeNSec uint32) {
 	var (
-		unixTime uint64
+		unixTime uint64 = uint64(goTime.UnixNano())
 	)
-	unixTime = uint64(goTime.UnixNano())
 	unixTimeSec = unixTime / 1e9
 	unixTimeNSec = uint32(unixTime - (unixTimeSec * 1e9))
 	return
@@ -333,32 +324,32 @@ func unixTimeNow() (unixTimeNowSec uint64, unixTimeNowNSec uint32) {
 
 func cloneByteSlice(inBuf []byte) (outBuf []byte) {
 	outBuf = make([]byte, len(inBuf))
-	if 0 != len(inBuf) {
+	if len(inBuf) != 0 {
 		_ = copy(outBuf, inBuf)
 	}
 	return
 }
 
-func (dummy *xattrMapDummyStruct) DumpKey(key sortedmap.Key) (keyAsString string, err error) {
-	keyAsString = string(key.([]byte)[:])
+func (*xattrMapDummyStruct) DumpKey(key sortedmap.Key) (keyAsString string, err error) {
+	keyAsString = string(key.([]byte))
 	err = nil
 	return
 }
 
-func (dummy *xattrMapDummyStruct) DumpValue(value sortedmap.Value) (valueAsString string, err error) {
+func (*xattrMapDummyStruct) DumpValue(value sortedmap.Value) (valueAsString string, err error) {
 	valueAsString = fmt.Sprintf("%v", value.([]byte))
 	err = nil
 	return
 }
 
-func (dummy *dirEntryMapDummyStruct) DumpKey(key sortedmap.Key) (keyAsString string, err error) {
-	keyAsString = string(key.([]byte)[:])
+func (*dirEntryMapDummyStruct) DumpKey(key sortedmap.Key) (keyAsString string, err error) {
+	keyAsString = string(key.([]byte))
 	err = nil
 	return
 }
 
-func (dummy *dirEntryMapDummyStruct) DumpValue(value sortedmap.Value) (valueAsString string, err error) {
-	valueAsString = fmt.Sprintf("%d", value.(uint64))
+func (*dirEntryMapDummyStruct) DumpValue(value sortedmap.Value) (valueAsString string, err error) {
+	valueAsString = strconv.FormatUint(value.(uint64), 10)
 	err = nil
 	return
 }

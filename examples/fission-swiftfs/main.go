@@ -1,4 +1,4 @@
-// Copyright (c) 2015-2021, NVIDIA CORPORATION.
+// Copyright (c) 2015-2025, NVIDIA CORPORATION.
 // SPDX-License-Identifier: Apache-2.0
 
 package main
@@ -6,8 +6,9 @@ package main
 import (
 	"container/list"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -18,10 +19,9 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/NVIDIA/fission"
 	"github.com/NVIDIA/sortedmap"
 	"golang.org/x/sys/unix"
-
-	"github.com/NVIDIA/fission"
 )
 
 const (
@@ -43,24 +43,13 @@ const (
 
 	maxPages = 256                     // * 4KiB page size == 1MiB... the max read or write size in Linux FUSE at this time
 	maxRead  = uint32(maxPages * 4096) //                     1MiB... the max read          size in Linux FUSE at this time
-	maxWrite = uint32(maxPages * 4096) //                     1MiB... the max         write size in Linux FUSE at this time
+	maxWrite = 0                       // indicates the volume is to be mounted ReadOnly
 
 	attrBlkSize = uint32(512)
-
-	entryValidSec  = uint64(10)
-	entryValidNSec = uint32(0)
-
-	attrValidSec  = uint64(10)
-	attrValidNSec = uint32(0)
 
 	accessROK = syscall.S_IROTH // surprisingly not defined as syscall.R_OK
 	accessWOK = syscall.S_IWOTH // surprisingly not defined as syscall.W_OK
 	accessXOK = syscall.S_IXOTH // surprisingly not defined as syscall.X_OK
-
-	accessMask       = syscall.S_IRWXO // used to mask Owner, Group, or Other RWX bits
-	accessOwnerShift = 6
-	accessGroupShift = 3
-	accessOtherShift = 0
 
 	dirMode  = uint32(syscall.S_IFDIR | syscall.S_IRUSR | syscall.S_IXUSR | syscall.S_IRGRP | syscall.S_IXGRP | syscall.S_IROTH | syscall.S_IXOTH)
 	fileMode = uint32(syscall.S_IFREG | syscall.S_IRUSR | syscall.S_IRGRP | syscall.S_IROTH)
@@ -153,7 +142,7 @@ func main() {
 		signalChan                chan os.Signal
 	)
 
-	if 2 != len(os.Args) {
+	if len(os.Args) != 2 {
 		fmt.Printf("Usage: %s <configFile>\n", os.Args[0])
 		fmt.Printf("  where <configFile> is a JSON object of the form:\n")
 		fmt.Printf("    {\n")
@@ -176,36 +165,36 @@ func main() {
 		os.Exit(0)
 	}
 
-	configFileContent, err = ioutil.ReadFile(os.Args[1])
-	if nil != err {
-		fmt.Printf("ioutil.ReadFile(\"%s\") failed: %v\n", os.Args[1], err)
+	configFileContent, err = os.ReadFile(os.Args[1])
+	if err != nil {
+		fmt.Printf("os.ReadFile(\"%s\") failed: %v\n", os.Args[1], err)
 		os.Exit(1)
 	}
 
 	globals.config = &configStruct{}
 
 	err = json.Unmarshal(configFileContent, globals.config)
-	if nil != err {
+	if err != nil {
 		fmt.Printf("json.Unmarshal(configFileContent, config) failed: %v\n", err)
 		os.Exit(1)
 	}
-	if "" == globals.config.AuthURL {
-		if ("" != globals.config.AuthUser) || ("" != globals.config.AuthKey) {
+	if globals.config.AuthURL == "" {
+		if (globals.config.AuthUser != "") || (globals.config.AuthKey != "") {
 			fmt.Printf("If no AuthURL is provided, do not provide either AuthUser or AuthKey\n")
 			os.Exit(1)
 		}
 
-		if "" == globals.config.AuthToken {
+		if globals.config.AuthToken == "" {
 			globals.authMode = authModeNoAuthNeeded
 		} else {
 			globals.authMode = authModeTokenProvided
 		}
 	} else {
-		if ("" == globals.config.AuthUser) || ("" == globals.config.AuthKey) {
+		if (globals.config.AuthUser == "") || (globals.config.AuthKey == "") {
 			fmt.Printf("If AuthURL is provided, you must provide both AuthUser and AuthKey\n")
 			os.Exit(1)
 		}
-		if "" != globals.config.AuthToken {
+		if globals.config.AuthToken != "" {
 			fmt.Printf("If AuthURL is provided, you must not provide an AuthToken\n")
 			os.Exit(1)
 		}
@@ -219,7 +208,7 @@ func main() {
 	globals.volumeName = path.Base(globals.config.MountPoint)
 
 	globals.swiftTimeout, err = time.ParseDuration(globals.config.SwiftTimeout)
-	if nil != err {
+	if err != nil {
 		fmt.Printf("time.ParseDuration(\"%s\") failed: %v\n", globals.config.SwiftTimeout, err)
 		os.Exit(1)
 	}
@@ -235,8 +224,7 @@ func main() {
 	customTransport = &http.Transport{ // Up-to-date as of Golang 1.11
 		Proxy:                  defaultTransport.Proxy,
 		DialContext:            defaultTransport.DialContext,
-		Dial:                   defaultTransport.Dial,
-		DialTLS:                defaultTransport.DialTLS,
+		DialTLSContext:         defaultTransport.DialTLSContext,
 		TLSClientConfig:        defaultTransport.TLSClientConfig,
 		TLSHandshakeTimeout:    globals.swiftTimeout,
 		DisableKeepAlives:      false,
@@ -261,8 +249,8 @@ func main() {
 
 RetryAfterReAuth:
 
-	httpRequest, err = http.NewRequest("GET", globals.config.ContainerURL, nil)
-	if nil != err {
+	httpRequest, err = http.NewRequest("GET", globals.config.ContainerURL, http.NoBody)
+	if err != nil {
 		fmt.Printf("http.NewRequest(\"GET\", \"%s\", nil) failed: %v\n", globals.config.ContainerURL, err)
 		os.Exit(1)
 	}
@@ -270,23 +258,23 @@ RetryAfterReAuth:
 	httpRequest.Header["User-Agent"] = []string{httpUserAgent}
 
 	authToken = fetchAuthToken()
-	if "" != authToken {
+	if authToken != "" {
 		httpRequest.Header["X-Auth-Token"] = []string{authToken}
 	}
 
 	httpResponse, err = globals.httpClient.Do(httpRequest)
-	if nil != err {
+	if err != nil {
 		fmt.Printf("globals.httpClient.Do(GET %s) failed: %v\n", globals.config.ContainerURL, err)
 		os.Exit(1)
 	}
 
-	httpResponseBody, err = ioutil.ReadAll(httpResponse.Body)
-	if nil != err {
-		fmt.Printf("ioutil.ReadAll(httpResponse.Body) failed: %v\n", err)
+	httpResponseBody, err = io.ReadAll(httpResponse.Body)
+	if err != nil {
+		fmt.Printf("io.ReadAll(httpResponse.Body) failed: %v\n", err)
 		os.Exit(1)
 	}
 	err = httpResponse.Body.Close()
-	if nil != err {
+	if err != nil {
 		fmt.Printf("httpResponse.Body.Close() failed: %v\n", err)
 		os.Exit(1)
 	}
@@ -304,13 +292,13 @@ RetryAfterReAuth:
 		goto RetryAfterReAuth
 	}
 
-	if (200 > httpResponse.StatusCode) || (299 < httpResponse.StatusCode) {
+	if (httpResponse.StatusCode < 200) || (httpResponse.StatusCode > 299) {
 		fmt.Printf("globals.httpClient.Do(GET %s) returned unexpected Status: %s\n", globals.config.ContainerURL, httpResponse.Status)
 		os.Exit(1)
 	}
 
 	rootDirMTime, err = time.Parse(time.RFC1123, httpResponse.Header.Get("Last-Modified"))
-	if nil == err {
+	if err == nil {
 		rootDirMTimeSec, rootDirMTimeNSec = goTimeToUnixTime(rootDirMTime)
 	} else {
 		rootDirMTimeSec, rootDirMTimeNSec = goTimeToUnixTime(globals.startTime)
@@ -344,7 +332,7 @@ RetryAfterReAuth:
 	}
 
 	ok, err = globals.rootDirMap.Put(dirEntry.name, dirEntry)
-	if nil != err {
+	if err != nil {
 		fmt.Printf("globals.rootDirMap.Put(\"%s\", %#v) failed: %v\n", dirEntry.name, dirEntry, err)
 		os.Exit(1)
 	}
@@ -360,7 +348,7 @@ RetryAfterReAuth:
 	}
 
 	ok, err = globals.rootDirMap.Put(dirEntry.name, dirEntry)
-	if nil != err {
+	if err != nil {
 		fmt.Printf("globals.rootDirMap.Put(\"%s\", %#v) failed: %v\n", dirEntry.name, dirEntry, err)
 		os.Exit(1)
 	}
@@ -369,9 +357,9 @@ RetryAfterReAuth:
 		os.Exit(1)
 	}
 
-	objectNameList = strings.Split(string(httpResponseBody[:]), "\n")
+	objectNameList = strings.Split(string(httpResponseBody), "\n")
 	if 0 < len(objectNameList) {
-		if "" == objectNameList[len(objectNameList)-1] {
+		if objectNameList[len(objectNameList)-1] == "" {
 			objectNameList = objectNameList[:len(objectNameList)-1]
 		}
 	}
@@ -390,7 +378,7 @@ RetryAfterReAuth:
 		}
 
 		ok, err = globals.rootDirMap.Put(dirEntry.name, dirEntry)
-		if nil != err {
+		if err != nil {
 			fmt.Printf("globals.rootDirMap.Put(\"%s\", %#v) failed: %v\n", dirEntry.name, dirEntry, err)
 			os.Exit(1)
 		}
@@ -418,7 +406,7 @@ RetryAfterReAuth:
 	globals.volume = fission.NewVolume(globals.volumeName, globals.config.MountPoint, fuseSubtype, maxRead, maxWrite, false, false, &globals, globals.logger, globals.errChan)
 
 	err = globals.volume.DoMount()
-	if nil != err {
+	if err != nil {
 		globals.logger.Printf("fission.DoMount() failed: %v", err)
 		os.Exit(1)
 	}
@@ -427,7 +415,7 @@ RetryAfterReAuth:
 	signal.Notify(signalChan, unix.SIGINT, unix.SIGTERM, unix.SIGHUP)
 
 	select {
-	case _ = <-signalChan:
+	case <-signalChan:
 		// Normal termination due to one of the above registered signals
 	case err = <-globals.errChan:
 		// Unexpected exit of /dev/fuse read loop since it's before we call DoUnmount()
@@ -435,7 +423,7 @@ RetryAfterReAuth:
 	}
 
 	err = globals.volume.DoUnmount()
-	if nil != err {
+	if err != nil {
 		globals.logger.Printf("fission.DoUnmount() failed: %v", err)
 		os.Exit(1)
 	}
@@ -454,8 +442,8 @@ func fetchAuthToken() (authToken string) {
 	case authModeURLProvided:
 	RetryGetAuthTokenWait:
 		globals.Lock()
-		if "" == globals.authToken {
-			if nil == globals.authWG {
+		if globals.authToken == "" {
+			if globals.authWG == nil {
 				globals.authWG = &sync.WaitGroup{}
 				globals.authWG.Add(1)
 				go getAuthToken()
@@ -464,10 +452,9 @@ func fetchAuthToken() (authToken string) {
 			globals.Unlock()
 			localAuthWG.Wait()
 			goto RetryGetAuthTokenWait
-		} else {
-			authToken = globals.authToken
-			globals.Unlock()
 		}
+		authToken = globals.authToken
+		globals.Unlock()
 	}
 
 	return
@@ -481,7 +468,7 @@ func forceReAuth() {
 
 	globals.Lock()
 
-	if nil == globals.authWG {
+	if globals.authWG == nil {
 		globals.authWG = &sync.WaitGroup{}
 		globals.authToken = ""
 		go getAuthToken()
@@ -498,8 +485,8 @@ func getAuthToken() {
 		localAuthWG  *sync.WaitGroup
 	)
 
-	httpRequest, err = http.NewRequest("GET", globals.config.AuthURL, nil)
-	if nil != err {
+	httpRequest, err = http.NewRequest("GET", globals.config.AuthURL, http.NoBody)
+	if err != nil {
 		fmt.Printf("http.NewRequest(\"GET\", \"%s\", nil) failed: %v\n", globals.config.AuthURL, err)
 		os.Exit(1)
 	}
@@ -509,18 +496,18 @@ func getAuthToken() {
 	httpRequest.Header["X-Auth-Key"] = []string{globals.config.AuthKey}
 
 	httpResponse, err = globals.httpClient.Do(httpRequest)
-	if nil != err {
+	if err != nil {
 		fmt.Printf("globals.httpClient.Do(GET %s) failed: %v\n", globals.config.AuthURL, err)
 		os.Exit(1)
 	}
 
-	_, err = ioutil.ReadAll(httpResponse.Body)
-	if nil != err {
-		fmt.Printf("ioutil.ReadAll(httpResponse.Body) failed: %v\n", err)
+	_, err = io.ReadAll(httpResponse.Body)
+	if err != nil {
+		fmt.Printf("io.ReadAll(httpResponse.Body) failed: %v\n", err)
 		os.Exit(1)
 	}
 	err = httpResponse.Body.Close()
-	if nil != err {
+	if err != nil {
 		fmt.Printf("httpResponse.Body.Close() failed: %v\n", err)
 		os.Exit(1)
 	}
@@ -544,23 +531,14 @@ func getAuthToken() {
 
 func goTimeToUnixTime(goTime time.Time) (unixTimeSec uint64, unixTimeNSec uint32) {
 	var (
-		unixTime uint64
+		unixTime uint64 = uint64(goTime.UnixNano())
 	)
-	unixTime = uint64(goTime.UnixNano())
 	unixTimeSec = unixTime / 1e9
 	unixTimeNSec = uint32(unixTime - (unixTimeSec * 1e9))
 	return
 }
 
-func cloneByteSlice(inBuf []byte) (outBuf []byte) {
-	outBuf = make([]byte, len(inBuf))
-	if 0 != len(inBuf) {
-		_ = copy(outBuf, inBuf)
-	}
-	return
-}
-
-func (dummy *globalsStruct) DumpKey(key sortedmap.Key) (keyAsString string, err error) {
+func (*globalsStruct) DumpKey(key sortedmap.Key) (keyAsString string, err error) {
 	var (
 		ok bool
 	)
@@ -569,13 +547,13 @@ func (dummy *globalsStruct) DumpKey(key sortedmap.Key) (keyAsString string, err 
 	if ok {
 		err = nil
 	} else {
-		err = fmt.Errorf("keyAsString, ok = key.(string) returned !ok")
+		err = errors.New("keyAsString, ok = key.(string) returned !ok")
 	}
 
 	return
 }
 
-func (dummy *globalsStruct) DumpValue(value sortedmap.Value) (valueAsString string, err error) {
+func (*globalsStruct) DumpValue(value sortedmap.Value) (valueAsString string, err error) {
 	var (
 		ok              bool
 		valueAsDirEntry *dirEntryStruct
@@ -586,7 +564,7 @@ func (dummy *globalsStruct) DumpValue(value sortedmap.Value) (valueAsString stri
 		valueAsString = fmt.Sprintf("%#v", valueAsDirEntry)
 		err = nil
 	} else {
-		err = fmt.Errorf("valueAsDirEntry, ok = key.(*dirEntryStruct) returned !ok")
+		err = errors.New("valueAsDirEntry, ok = key.(*dirEntryStruct) returned !ok")
 	}
 
 	return
