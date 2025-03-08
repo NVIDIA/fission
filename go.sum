@@ -1,7 +1,7 @@
-github.com/NVIDIA/cstruct v0.0.0-20221206222058-cbc877f192d5 h1:u9jQ3H8RSqtqTu7b+oACnChS7HsVpbV46/qBJPVCBjU=
-github.com/NVIDIA/cstruct v0.0.0-20221206222058-cbc877f192d5/go.mod h1:s/x+WQqgkcAbDPltLPIs0AwqxY7W6UG0RGhuMVy8tds=
-github.com/NVIDIA/sortedmap v0.0.0-20221206223250-5aaf17459438 h1:0TZfWYaOMyrK2aiyf5KcX9rxFyVapg8m1zd8AWBefwE=
-github.com/NVIDIA/sortedmap v0.0.0-20221206223250-5aaf17459438/go.mod h1:uTjxdPdujmeJm/c1BNApnnX4KW+9nYmt0L6Ijft1+M4=
+github.com/NVIDIA/cstruct v0.0.0-20250307070155-f9239ba214be h1:9tdLeW/rBRMdmAr3oVL9Dg2Z0idiaY3JrhdAHlGZMFo=
+github.com/NVIDIA/cstruct v0.0.0-20250307070155-f9239ba214be/go.mod h1:Vjlom704MubZmUijKBqJt0yONPC4355FTjPS72GYCio=
+github.com/NVIDIA/sortedmap v0.0.0-20250307233851-6606d0ef3678 h1:z3rLjIAD7qzegdvfoFMd8WUO+DmtP93JsoGwHsdcZ80=
+github.com/NVIDIA/sortedmap v0.0.0-20250307233851-6606d0ef3678/go.mod h1:UIAtmWtD5UGUFnDlvu+G3fpZNTLk4NOe4mxlSTAZOlg=
 github.com/aws/aws-sdk-go-v2 v1.21.2 h1:+LXZ0sgo8quN9UOKXXzAWRT3FWd4NxeXWOZom9pE7GA=
 github.com/aws/aws-sdk-go-v2 v1.21.2/go.mod h1:ErQhvNuEMhJjweavOYhxVkn2RUx7kQXVATHrjKtxIpM=
 github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.4.14 h1:Sc82v7tDQ/vdU1WtuSyzZ1I7y/68j//HJ6uozND1IDs=
