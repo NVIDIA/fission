@@ -968,8 +968,8 @@ func (volume *volumeStruct) doInit(inHeader *InHeader, devFuseFDReadBufPayload [
 		*(*uint32)(unsafe.Pointer(&outPayload[52])) = 0
 		*(*uint32)(unsafe.Pointer(&outPayload[56])) = 0
 		*(*uint32)(unsafe.Pointer(&outPayload[60])) = 0
-	case initOut.Minor >= 36:
-		outPayload = make([]byte, InitOut736AndBeyondSize)
+	case (initOut.Minor >= 36) && (initOut.Minor <= 39):
+		outPayload = make([]byte, InitOut736Thru739Size)
 
 		*(*uint32)(unsafe.Pointer(&outPayload[0])) = initOut.Major
 		*(*uint32)(unsafe.Pointer(&outPayload[4])) = initOut.Minor
@@ -984,6 +984,49 @@ func (volume *volumeStruct) doInit(inHeader *InHeader, devFuseFDReadBufPayload [
 		*(*uint32)(unsafe.Pointer(&outPayload[32])) = initOut.Flags2
 		*(*uint32)(unsafe.Pointer(&outPayload[36])) = 0
 		*(*uint32)(unsafe.Pointer(&outPayload[40])) = 0
+		*(*uint32)(unsafe.Pointer(&outPayload[44])) = 0
+		*(*uint32)(unsafe.Pointer(&outPayload[48])) = 0
+		*(*uint32)(unsafe.Pointer(&outPayload[52])) = 0
+		*(*uint32)(unsafe.Pointer(&outPayload[56])) = 0
+		*(*uint32)(unsafe.Pointer(&outPayload[60])) = 0
+	case (initOut.Minor >= 40) && (initOut.Minor <= 42):
+		outPayload = make([]byte, InitOut740Thru742Size)
+
+		*(*uint32)(unsafe.Pointer(&outPayload[0])) = initOut.Major
+		*(*uint32)(unsafe.Pointer(&outPayload[4])) = initOut.Minor
+		*(*uint32)(unsafe.Pointer(&outPayload[8])) = initOut.MaxReadAhead
+		*(*uint32)(unsafe.Pointer(&outPayload[12])) = initOut.Flags
+		*(*uint16)(unsafe.Pointer(&outPayload[16])) = initOut.MaxBackground
+		*(*uint16)(unsafe.Pointer(&outPayload[18])) = initOut.CongestionThreshhold
+		*(*uint32)(unsafe.Pointer(&outPayload[20])) = initOut.MaxWrite
+		*(*uint32)(unsafe.Pointer(&outPayload[24])) = initOut.TimeGran
+		*(*uint16)(unsafe.Pointer(&outPayload[28])) = initOut.MaxPages
+		*(*uint16)(unsafe.Pointer(&outPayload[30])) = initOut.MapAlignment
+		*(*uint32)(unsafe.Pointer(&outPayload[32])) = initOut.Flags2
+		*(*uint32)(unsafe.Pointer(&outPayload[36])) = initOut.MaxStackDepth
+		*(*uint32)(unsafe.Pointer(&outPayload[40])) = 0
+		*(*uint32)(unsafe.Pointer(&outPayload[44])) = 0
+		*(*uint32)(unsafe.Pointer(&outPayload[48])) = 0
+		*(*uint32)(unsafe.Pointer(&outPayload[52])) = 0
+		*(*uint32)(unsafe.Pointer(&outPayload[56])) = 0
+		*(*uint32)(unsafe.Pointer(&outPayload[60])) = 0
+	case initOut.Minor >= 43:
+		outPayload = make([]byte, InitOut743AndBeyondSize)
+
+		*(*uint32)(unsafe.Pointer(&outPayload[0])) = initOut.Major
+		*(*uint32)(unsafe.Pointer(&outPayload[4])) = initOut.Minor
+		*(*uint32)(unsafe.Pointer(&outPayload[8])) = initOut.MaxReadAhead
+		*(*uint32)(unsafe.Pointer(&outPayload[12])) = initOut.Flags
+		*(*uint16)(unsafe.Pointer(&outPayload[16])) = initOut.MaxBackground
+		*(*uint16)(unsafe.Pointer(&outPayload[18])) = initOut.CongestionThreshhold
+		*(*uint32)(unsafe.Pointer(&outPayload[20])) = initOut.MaxWrite
+		*(*uint32)(unsafe.Pointer(&outPayload[24])) = initOut.TimeGran
+		*(*uint16)(unsafe.Pointer(&outPayload[28])) = initOut.MaxPages
+		*(*uint16)(unsafe.Pointer(&outPayload[30])) = initOut.MapAlignment
+		*(*uint32)(unsafe.Pointer(&outPayload[32])) = initOut.Flags2
+		*(*uint32)(unsafe.Pointer(&outPayload[36])) = initOut.MaxStackDepth
+		*(*uint16)(unsafe.Pointer(&outPayload[40])) = initOut.RequestTimeout
+		*(*uint16)(unsafe.Pointer(&outPayload[42])) = 0
 		*(*uint32)(unsafe.Pointer(&outPayload[44])) = 0
 		*(*uint32)(unsafe.Pointer(&outPayload[48])) = 0
 		*(*uint32)(unsafe.Pointer(&outPayload[52])) = 0

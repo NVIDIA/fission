@@ -129,6 +129,8 @@ func NewVolume(volumeName, mountpointDirPath, fuseSubtype string, maxRead, maxWr
 //  6.9      7.40
 //  6.12     7.41
 //  6.14     7.42
+//  6.15     7.43
+//  6.16     7.44
 
 const AttrSize = 88
 
@@ -248,9 +250,17 @@ const (
 	InitFalgsInitExt           = uint32(1) << 30
 	InitFlagsInitReserved      = uint32(1) << 31
 
-	InitFlags2SecurityCtx     = uint32(1) << 0
-	InitFlags2HasInodeDAX     = uint32(1) << 1
-	InitFlags2CreateSuppGroup = uint32(1) << 2
+	InitFlags2SecurityCtx       = uint32(1) << 0
+	InitFlags2HasInodeDAX       = uint32(1) << 1
+	InitFlags2CreateSuppGroup   = uint32(1) << 2
+	InitFlags2HasExpireOnly     = uint32(1) << 3
+	InitFlags2DirectIoAllowMmap = uint32(1) << 4
+	InitFlags2Passthrough       = uint32(1) << 5
+	InitFlags2NoExportSupport   = uint32(1) << 6
+	InitFlags2HasResend         = uint32(1) << 7
+	InitFlags2AllowIdmap        = uint32(1) << 8
+	InitFlags2OverIoUring       = uint32(1) << 9
+	InitFlags2RequestTimeout    = uint32(1) << 10
 )
 
 const (
@@ -309,6 +319,8 @@ const (
 	NotifyStore
 	NotifyRetrieve
 	NotifyDelete
+	NotifyResent
+	NotifyIncEpoch
 	NotifyCodeMax
 )
 
@@ -816,9 +828,9 @@ type InitOut731bThru735 struct {
 	Spare                [8]uint32
 }
 
-const InitOut736AndBeyondSize = 64
+const InitOut736Thru739Size = 64
 
-type InitOut736AndBeyond struct {
+type InitOut736Thru739 struct {
 	Major                uint32
 	Minor                uint32
 	MaxReadAhead         uint32
@@ -831,6 +843,43 @@ type InitOut736AndBeyond struct {
 	MapAlignment         uint16
 	Flags2               uint32
 	Unused               [7]uint32
+}
+
+const InitOut740Thru742Size = 64
+
+type InitOut740Thru742 struct {
+	Major                uint32
+	Minor                uint32
+	MaxReadAhead         uint32
+	Flags                uint32 // mask of const InitFlags* bits
+	MaxBackground        uint16
+	CongestionThreshhold uint16
+	MaxWrite             uint32
+	TimeGran             uint32
+	MaxPages             uint16
+	MapAlignment         uint16
+	Flags2               uint32
+	MaxStackDepth        uint32
+	Unused               [6]uint32
+}
+
+const InitOut743AndBeyondSize = 64
+
+type InitOut743AndBeyond struct {
+	Major                uint32
+	Minor                uint32
+	MaxReadAhead         uint32
+	Flags                uint32 // mask of const InitFlags* bits
+	MaxBackground        uint16
+	CongestionThreshhold uint16
+	MaxWrite             uint32
+	TimeGran             uint32
+	MaxPages             uint16
+	MapAlignment         uint16
+	Flags2               uint32
+	MaxStackDepth        uint32
+	RequestTimeout       uint16
+	Unused               [11]uint16
 }
 
 const InitOutSize = 64
@@ -847,7 +896,9 @@ type InitOut struct {
 	MaxPages             uint16
 	MapAlignment         uint16
 	Flags2               uint32
-	Unused               [7]uint32
+	MaxStackDepth        uint32
+	RequestTimeout       uint16
+	Unused               [11]uint16
 }
 
 const OpenDirInSize = 8

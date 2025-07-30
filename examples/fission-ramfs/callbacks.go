@@ -1520,7 +1520,9 @@ func (*globalsStruct) DoInit(_ *fission.InHeader, initIn *fission.InitIn) (initO
 		MaxPages:             maxPages,
 		MapAlignment:         0, // accept default
 		Flags2:               0,
-		Unused:               [7]uint32{0, 0, 0, 0, 0, 0, 0},
+		MaxStackDepth:        0,
+		RequestTimeout:       0,
+		Unused:               [11]uint16{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
 	}
 
 	errno = 0
