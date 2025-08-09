@@ -542,6 +542,8 @@ func (volume *volumeStruct) processDevFuseFDReadBuf(devFuseFDReadBufPtr *[]byte)
 		volume.doRename2(inHeader, devFuseFDReadBuf[InHeaderSize:])
 	case OpCodeLSeek:
 		volume.doLSeek(inHeader, devFuseFDReadBuf[InHeaderSize:])
+	case OpCodeStatX:
+		volume.doStatX(inHeader, devFuseFDReadBuf[InHeaderSize:])
 	default:
 		volume.devFuseFDWriter(inHeader, syscall.ENOSYS)
 	}

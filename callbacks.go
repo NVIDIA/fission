@@ -1696,3 +1696,85 @@ func (volume *volumeStruct) doLSeek(inHeader *InHeader, devFuseFDReadBufPayload 
 
 	volume.devFuseFDWriter(inHeader, 0, outPayload)
 }
+
+func (volume *volumeStruct) doStatX(inHeader *InHeader, devFuseFDReadBufPayload []byte) {
+	var (
+		errno      syscall.Errno
+		outPayload []byte
+		statXIn    *StatXIn
+		statXOut   *StatXOut
+	)
+
+	if len(devFuseFDReadBufPayload) != StatXInSize {
+		volume.logger.Printf("Call to doStatX() with bad len(devFuseFDReadBufPayload) == %v", len(devFuseFDReadBufPayload))
+		volume.devFuseFDWriter(inHeader, syscall.EINVAL)
+		return
+	}
+
+	statXIn = &StatXIn{
+		Flags:   *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[0])),
+		Dummy:   *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[4])),
+		FH:      *(*uint64)(unsafe.Pointer(&devFuseFDReadBufPayload[8])),
+		SXFlags: *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[16])),
+		SXMask:  *(*uint32)(unsafe.Pointer(&devFuseFDReadBufPayload[20])),
+	}
+
+	statXOut, errno = volume.callbacks.DoStatX(inHeader, statXIn)
+	if errno != 0 {
+		volume.devFuseFDWriter(inHeader, errno)
+		return
+	}
+
+	outPayload = make([]byte, StatXOutSize)
+
+	*(*uint64)(unsafe.Pointer(&outPayload[0])) = statXOut.AttrValidSec
+	*(*uint32)(unsafe.Pointer(&outPayload[8])) = statXOut.AttrValidNSec
+	*(*uint32)(unsafe.Pointer(&outPayload[12])) = statXOut.Flags
+	*(*uint64)(unsafe.Pointer(&outPayload[16])) = statXOut.Spare[0]
+	*(*uint64)(unsafe.Pointer(&outPayload[24])) = statXOut.Spare[1]
+
+	*(*uint32)(unsafe.Pointer(&outPayload[32])) = statXOut.Mask
+	*(*uint32)(unsafe.Pointer(&outPayload[36])) = statXOut.BlkSize
+	*(*uint64)(unsafe.Pointer(&outPayload[40])) = statXOut.Attributes
+	*(*uint32)(unsafe.Pointer(&outPayload[48])) = statXOut.NLink
+	*(*uint32)(unsafe.Pointer(&outPayload[52])) = statXOut.UID
+	*(*uint32)(unsafe.Pointer(&outPayload[56])) = statXOut.GID
+	*(*uint16)(unsafe.Pointer(&outPayload[60])) = statXOut.Mode
+	*(*uint16)(unsafe.Pointer(&outPayload[62])) = statXOut.Spare0[0]
+	*(*uint64)(unsafe.Pointer(&outPayload[64])) = statXOut.Ino
+	*(*uint64)(unsafe.Pointer(&outPayload[72])) = statXOut.Size
+	*(*uint64)(unsafe.Pointer(&outPayload[80])) = statXOut.Blocks
+	*(*uint64)(unsafe.Pointer(&outPayload[88])) = statXOut.AttributesMask
+	*(*uint64)(unsafe.Pointer(&outPayload[96])) = statXOut.ATime.TVSec
+	*(*uint32)(unsafe.Pointer(&outPayload[104])) = statXOut.ATime.TVNSec
+	*(*uint32)(unsafe.Pointer(&outPayload[108])) = statXOut.ATime.Reserved
+	*(*uint64)(unsafe.Pointer(&outPayload[112])) = statXOut.BTime.TVSec
+	*(*uint32)(unsafe.Pointer(&outPayload[120])) = statXOut.BTime.TVNSec
+	*(*uint32)(unsafe.Pointer(&outPayload[124])) = statXOut.BTime.Reserved
+	*(*uint64)(unsafe.Pointer(&outPayload[128])) = statXOut.CTime.TVSec
+	*(*uint32)(unsafe.Pointer(&outPayload[136])) = statXOut.CTime.TVNSec
+	*(*uint32)(unsafe.Pointer(&outPayload[140])) = statXOut.CTime.Reserved
+	*(*uint64)(unsafe.Pointer(&outPayload[144])) = statXOut.MTime.TVSec
+	*(*uint32)(unsafe.Pointer(&outPayload[152])) = statXOut.MTime.TVNSec
+	*(*uint32)(unsafe.Pointer(&outPayload[156])) = statXOut.MTime.Reserved
+	*(*uint32)(unsafe.Pointer(&outPayload[160])) = statXOut.RDevMajor
+	*(*uint32)(unsafe.Pointer(&outPayload[164])) = statXOut.RDevMinor
+	*(*uint32)(unsafe.Pointer(&outPayload[168])) = statXOut.DevMajor
+	*(*uint32)(unsafe.Pointer(&outPayload[172])) = statXOut.DevMinor
+	*(*uint64)(unsafe.Pointer(&outPayload[176])) = statXOut.Spare2[0]
+	*(*uint64)(unsafe.Pointer(&outPayload[184])) = statXOut.Spare2[1]
+	*(*uint64)(unsafe.Pointer(&outPayload[192])) = statXOut.Spare2[2]
+	*(*uint64)(unsafe.Pointer(&outPayload[200])) = statXOut.Spare2[3]
+	*(*uint64)(unsafe.Pointer(&outPayload[208])) = statXOut.Spare2[4]
+	*(*uint64)(unsafe.Pointer(&outPayload[216])) = statXOut.Spare2[5]
+	*(*uint64)(unsafe.Pointer(&outPayload[224])) = statXOut.Spare2[6]
+	*(*uint64)(unsafe.Pointer(&outPayload[232])) = statXOut.Spare2[7]
+	*(*uint64)(unsafe.Pointer(&outPayload[240])) = statXOut.Spare2[8]
+	*(*uint64)(unsafe.Pointer(&outPayload[248])) = statXOut.Spare2[9]
+	*(*uint64)(unsafe.Pointer(&outPayload[256])) = statXOut.Spare2[10]
+	*(*uint64)(unsafe.Pointer(&outPayload[264])) = statXOut.Spare2[11]
+	*(*uint64)(unsafe.Pointer(&outPayload[272])) = statXOut.Spare2[12]
+	*(*uint64)(unsafe.Pointer(&outPayload[280])) = statXOut.Spare2[13]
+
+	volume.devFuseFDWriter(inHeader, 0, outPayload)
+}

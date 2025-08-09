@@ -2254,6 +2254,11 @@ func (*globalsStruct) DoLSeek(_ *fission.InHeader, _ *fission.LSeekIn) (lSeekOut
 	return
 }
 
+func (*globalsStruct) DoStatX(_ *fission.InHeader, _ *fission.StatXIn) (lSeekOut *fission.StatXOut, errno syscall.Errno) {
+	errno = syscall.ENOSYS
+	return
+}
+
 func fixAttrSizes(attr *fission.Attr) {
 	if syscall.S_IFREG == (attr.Mode & syscall.S_IFMT) {
 		attr.Blocks = attr.Size + (uint64(attrBlkSize) - 1)
