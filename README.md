@@ -80,6 +80,7 @@ type Callbacks interface {
 	DoReadDirPlus(inHeader *InHeader, readDirPlusIn *ReadDirPlusIn) (readDirPlusOut *ReadDirPlusOut, errno syscall.Errno)
 	DoRename2(inHeader *InHeader, rename2In *Rename2In) (errno syscall.Errno)
 	DoLSeek(inHeader *InHeader, lSeekIn *LSeekIn) (lSeekOut *LSeekOut, errno syscall.Errno)
+	DoStatX(inHeader *InHeader, statXIn *StatXIn) (statXOut *StatXOut, errno syscall.Errno)
 }
 
 // NewVolume is called to create a Volume instance. Various callbacks listed in the Callbacks interface
