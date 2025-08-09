@@ -961,3 +961,8 @@ func (*globalsStruct) DoLSeek(_ *fission.InHeader, _ *fission.LSeekIn) (lSeekOut
 	errno = syscall.ENOSYS
 	return
 }
+
+func (*globalsStruct) DoStatX(_ *fission.InHeader, _ *fission.StatXIn) (lSeekOut *fission.StatXOut, errno syscall.Errno) {
+	errno = syscall.ENOSYS
+	return
+}

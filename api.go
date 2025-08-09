@@ -79,6 +79,7 @@ type Callbacks interface {
 	DoReadDirPlus(inHeader *InHeader, readDirPlusIn *ReadDirPlusIn) (readDirPlusOut *ReadDirPlusOut, errno syscall.Errno)
 	DoRename2(inHeader *InHeader, rename2In *Rename2In) (errno syscall.Errno)
 	DoLSeek(inHeader *InHeader, lSeekIn *LSeekIn) (lSeekOut *LSeekOut, errno syscall.Errno)
+	DoStatX(inHeader *InHeader, statXIn *StatXIn) (statXOut *StatXOut, errno syscall.Errno)
 }
 
 // NewVolume is called to create a Volume instance. Various callbacks listed in the Callbacks
@@ -151,6 +152,56 @@ type Attr struct {
 	RDev      uint32
 	BlkSize   uint32
 	Padding   uint32
+}
+
+const SXTimeSize = 16
+
+type SXTime struct {
+	TVSec    uint64
+	TVNSec   uint32
+	Reserved uint32
+}
+
+const (
+	StatXMaskType       = uint32(0x00000001)
+	StatXMaskMode       = uint32(0x00000002)
+	StatXMaskNLink      = uint32(0x00000004)
+	StatXMaskUID        = uint32(0x00000008)
+	StatXMaskGID        = uint32(0x00000010)
+	StatXMaskATime      = uint32(0x00000020)
+	StatXMaskMTime      = uint32(0x00000040)
+	StatXMaskCTime      = uint32(0x00000080)
+	StatXMaskIno        = uint32(0x00000100)
+	StatXMaskSize       = uint32(0x00000200)
+	StatXMaskBlocks     = uint32(0x00000400)
+	StatXMaskBasicStats = uint32(0x000007FF)
+	StatXMaskBTime      = uint32(0x00000800)
+)
+
+const StatXSize = 30 + (1 * 2) + 32 + (4 * SXTimeSize) + 16 + (14 * 8)
+
+type StatX struct {
+	Mask           uint32 // mask of StatXMask* bits
+	BlkSize        uint32
+	Attributes     uint64
+	NLink          uint32
+	UID            uint32
+	GID            uint32
+	Mode           uint16
+	Spare0         [1]uint16
+	Ino            uint64
+	Size           uint64
+	Blocks         uint64
+	AttributesMask uint64
+	ATime          SXTime
+	BTime          SXTime
+	CTime          SXTime
+	MTime          SXTime
+	RDevMajor      uint32
+	RDevMinor      uint32
+	DevMajor       uint32
+	DevMinor       uint32
+	Spare2         [14]uint64
 }
 
 const KStatFSSize = 80
@@ -414,6 +465,7 @@ const (
 	OpCodeRemoveMapping = uint32(49) // unsupported
 	OpCodeSyncFS        = uint32(50) // unsupported
 	OpCodeTmpFile       = uint32(51) // unsupported
+	OpCodeStatX         = uint32(52)
 
 	OpCodeCuseInit = uint32(4096) // unsupported
 )
@@ -1127,4 +1179,24 @@ const LSeekOutSize = 8
 
 type LSeekOut struct {
 	Offset uint64
+}
+
+const StatXInSize = 24
+
+type StatXIn struct {
+	Flags   uint32 // mask of const GetAttrInFlags* bits
+	Dummy   uint32
+	FH      uint64
+	SXFlags uint32
+	SXMask  uint32 // mask of StatXMask* bits
+}
+
+const StatXOutSize = 16 + (2 * 8) + StatXSize
+
+type StatXOut struct {
+	AttrValidSec  uint64
+	AttrValidNSec uint32
+	Flags         uint32
+	Spare         [2]uint64
+	StatX
 }

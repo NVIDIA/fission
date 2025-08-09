@@ -6,7 +6,7 @@ version: '3.8'
 services:
   swift:
     image: dockerswiftaio/docker-swift:2.32.0
-    container_name: swift
+    container_name: fission_swift
     expose:
       - 8080
     ports:
@@ -17,7 +17,7 @@ services:
   dev:
     build:
       context: .
-    container_name: dev
+    container_name: fission_dev
     depends_on:
       - swift
     cap_add:
