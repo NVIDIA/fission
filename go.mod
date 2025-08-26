@@ -1,4 +1,4 @@
-module github.com/NVIDIA/fission
+module github.com/NVIDIA/fission/v3
 
 go 1.23
 

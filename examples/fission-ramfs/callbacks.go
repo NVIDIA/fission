@@ -7,7 +7,7 @@ import (
 	"os"
 	"syscall"
 
-	"github.com/NVIDIA/fission"
+	"github.com/NVIDIA/fission/v3"
 	"github.com/NVIDIA/sortedmap"
 )
 
