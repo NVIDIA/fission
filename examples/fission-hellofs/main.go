@@ -139,21 +139,21 @@ func main() {
 		Ino:     globals.rootInodeAttr.Ino,
 		Off:     1,
 		NameLen: uint32(len(rootDirDotName)),
-		Type:    globals.rootInodeAttr.Mode & syscall.S_IFMT,
+		Type:    syscall.DT_DIR,
 		Name:    rootDirDotName,
 	}
 	globals.dirEnt[1] = fission.DirEnt{
 		Ino:     globals.rootInodeAttr.Ino,
 		Off:     2,
 		NameLen: uint32(len(rootDirDotDotName)),
-		Type:    globals.rootInodeAttr.Mode & syscall.S_IFMT,
+		Type:    syscall.DT_DIR,
 		Name:    rootDirDotDotName,
 	}
 	globals.dirEnt[2] = fission.DirEnt{
 		Ino:     globals.helloInodeAttr.Ino,
 		Off:     3,
 		NameLen: uint32(len(helloFileName)),
-		Type:    globals.helloInodeAttr.Mode & syscall.S_IFMT,
+		Type:    syscall.DT_REG,
 		Name:    helloFileName,
 	}
 
