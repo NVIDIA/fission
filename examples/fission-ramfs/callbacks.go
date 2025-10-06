@@ -1582,6 +1582,7 @@ func (*globalsStruct) DoReadDir(inHeader *fission.InHeader, readDirIn *fission.R
 		dirEntNameAsKey       sortedmap.Key
 		dirEntNameLenAligned  uint32
 		dirEntSize            uint32
+		dirEntType            uint32
 		dirInode              *inodeStruct
 		err                   error
 		granted               bool
@@ -1663,11 +1664,17 @@ Restart:
 			goto Restart
 		}
 
+		if (dirEntInode.attr.Mode & syscall.S_IFMT) == syscall.S_IFDIR {
+			dirEntType = syscall.DT_DIR
+		} else {
+			dirEntType = syscall.DT_REG
+		}
+
 		readDirOut.DirEnt[dirEntIndex] = fission.DirEnt{
 			Ino:     dirEntInode.attr.Ino,
 			Off:     uint64(dirEntIndex) + 1,
 			NameLen: uint32(len(dirEntNameAsByteSlice)), // unnecessary
-			Type:    dirEntInode.attr.Mode & syscall.S_IFMT,
+			Type:    dirEntType,
 			Name:    cloneByteSlice(dirEntNameAsByteSlice),
 		}
 	}
@@ -2098,6 +2105,7 @@ func (*globalsStruct) DoReadDirPlus(inHeader *fission.InHeader, readDirPlusIn *f
 		dirEntSize            uint32
 		dirEntPlusCount       int
 		dirEntPlusIndex       int
+		dirEntType            uint32
 		dirInode              *inodeStruct
 		err                   error
 		granted               bool
@@ -2179,6 +2187,12 @@ Restart:
 			goto Restart
 		}
 
+		if (dirEntInode.attr.Mode & syscall.S_IFMT) == syscall.S_IFDIR {
+			dirEntType = syscall.DT_DIR
+		} else {
+			dirEntType = syscall.DT_REG
+		}
+
 		readDirPlusOut.DirEntPlus[dirEntPlusIndex] = fission.DirEntPlus{
 			EntryOut: fission.EntryOut{
 				NodeID:         dirEntInode.attr.Ino,
@@ -2208,7 +2222,7 @@ Restart:
 				Ino:     dirEntInode.attr.Ino,
 				Off:     uint64(dirEntPlusIndex) + 1,
 				NameLen: uint32(len(dirEntNameAsByteSlice)), // unnecessary
-				Type:    dirEntInode.attr.Mode & syscall.S_IFMT,
+				Type:    dirEntType,
 				Name:    cloneByteSlice(dirEntNameAsByteSlice),
 			},
 		}

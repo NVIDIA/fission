@@ -603,6 +603,7 @@ func (*globalsStruct) DoReadDir(inHeader *fission.InHeader, readDirIn *fission.R
 		dirEntMinSize            uint64
 		dirEntSize               uint64
 		dirEntSliceSize          uint64
+		dirEntType               uint32
 		dirInode                 *inodeStruct
 		dirTableEntryKey         sortedmap.Key
 		dirTableEntryInode       *inodeStruct
@@ -688,11 +689,17 @@ func (*globalsStruct) DoReadDir(inHeader *fission.InHeader, readDirIn *fission.R
 
 		dirTableIndex++
 
+		if (dirTableEntryInode.mode & syscall.S_IFMT) == syscall.S_IFDIR {
+			dirEntType = syscall.DT_DIR
+		} else {
+			dirEntType = syscall.DT_REG
+		}
+
 		readDirOut.DirEnt = append(readDirOut.DirEnt, fission.DirEnt{
 			Ino:     dirTableEntryInode.inodeNumber,
 			Off:     uint64(dirTableIndex),
 			NameLen: uint32(len(dirTableEntryName)),
-			Type:    dirTableEntryInode.mode & syscall.S_IFMT,
+			Type:    dirEntType,
 			Name:    []byte(dirTableEntryName),
 		})
 	}
@@ -796,6 +803,7 @@ func (*globalsStruct) DoReadDirPlus(inHeader *fission.InHeader, readDirPlusIn *f
 		dirEntPlusMinSize        uint64
 		dirEntPlusSize           uint64
 		dirEntPlusSliceSize      uint64
+		dirEntPlusType           uint32
 		dirInode                 *inodeStruct
 		dirTableEntryKey         sortedmap.Key
 		dirTableEntryInode       *inodeStruct
@@ -881,6 +889,12 @@ func (*globalsStruct) DoReadDirPlus(inHeader *fission.InHeader, readDirPlusIn *f
 
 		dirTableIndex++
 
+		if (dirTableEntryInode.mode & syscall.S_IFMT) == syscall.S_IFDIR {
+			dirEntPlusType = syscall.DT_DIR
+		} else {
+			dirEntPlusType = syscall.DT_REG
+		}
+
 		readDirPlusOut.DirEntPlus = append(readDirPlusOut.DirEntPlus, fission.DirEntPlus{
 			EntryOut: fission.EntryOut{
 				NodeID:         dirTableEntryInode.inodeNumber,
@@ -894,7 +908,7 @@ func (*globalsStruct) DoReadDirPlus(inHeader *fission.InHeader, readDirPlusIn *f
 				Ino:     dirTableEntryInode.inodeNumber,
 				Off:     uint64(dirTableIndex),
 				NameLen: uint32(len(dirTableEntryName)),
-				Type:    dirTableEntryInode.mode & syscall.S_IFMT,
+				Type:    dirEntPlusType,
 				Name:    []byte(dirTableEntryName),
 			},
 		})

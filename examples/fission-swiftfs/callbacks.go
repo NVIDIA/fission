@@ -671,9 +671,9 @@ func (*globalsStruct) DoReadDir(inHeader *fission.InHeader, readDirIn *fission.R
 		}
 
 		if dirEntry.isRootDir {
-			dirEntryType = syscall.S_IFDIR
+			dirEntryType = syscall.DT_DIR
 		} else {
-			dirEntryType = syscall.S_IFREG
+			dirEntryType = syscall.DT_REG
 		}
 
 		readDirOut.DirEnt = append(readDirOut.DirEnt, fission.DirEnt{
@@ -881,7 +881,7 @@ func (*globalsStruct) DoReadDirPlus(inHeader *fission.InHeader, readDirPlusIn *f
 					Ino:     1,
 					Off:     uint64(dirEntryIndex) + 1,
 					NameLen: uint32(len(dirEntryNameAsByteSlice)), // unnecessary
-					Type:    syscall.S_IFDIR,
+					Type:    syscall.DT_DIR,
 					Name:    dirEntryNameAsByteSlice,
 				},
 			})
@@ -901,7 +901,7 @@ func (*globalsStruct) DoReadDirPlus(inHeader *fission.InHeader, readDirPlusIn *f
 					Ino:     1,
 					Off:     uint64(dirEntryIndex) + 1,
 					NameLen: uint32(len(dirEntryNameAsByteSlice)), // unnecessary
-					Type:    syscall.S_IFREG,
+					Type:    syscall.DT_REG,
 					Name:    dirEntryNameAsByteSlice,
 				},
 			})
