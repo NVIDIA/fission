@@ -260,11 +260,14 @@ const (
 )
 
 const (
-	FOpenResponseDirectIO    = uint32(1) << 0
-	FOpenResponseKeepCache   = uint32(1) << 1
-	FOpenResponseNonSeekable = uint32(1) << 2
-	FOpenResponseCacheDir    = uint32(1) << 3
-	FOpenResponseStream      = uint32(1) << 4
+	FOpenResponseDirectIO             = uint32(1) << 0
+	FOpenResponseKeepCache            = uint32(1) << 1
+	FOpenResponseNonSeekable          = uint32(1) << 2
+	FOpenResponseCacheDir             = uint32(1) << 3
+	FOpenResponseStream               = uint32(1) << 4
+	FOpenResponseNoFlush              = uint32(1) << 5
+	FOpenResponseParallelDirectWrites = uint32(1) << 6
+	FOpenResponsePassThrough          = uint32(1) << 7
 )
 
 const (
