@@ -140,6 +140,7 @@ func main() {
 		rootDirMTimeNSec          uint32
 		rootDirMTimeSec           uint64
 		signalChan                chan os.Signal
+		volumeConfig              *fission.VolumeConfig
 	)
 
 	if len(os.Args) != 2 {
@@ -403,7 +404,21 @@ RetryAfterReAuth:
 
 	globals.errChan = make(chan error, 1)
 
-	globals.volume = fission.NewVolume(globals.volumeName, globals.config.MountPoint, fuseSubtype, maxRead, maxWrite, false, false, &globals, globals.logger, globals.errChan)
+	volumeConfig = &fission.VolumeConfig{
+		VolumeName:         globals.volumeName,
+		MountpointDirPath:  globals.config.MountPoint,
+		FuseSubtype:        fuseSubtype,
+		MaxRead:            maxRead,
+		MaxWrite:           maxWrite,
+		DefaultPermissions: false,
+		AllowOther:         false,
+		NumWorkers:         0,
+		Callbacks:          &globals,
+		Logger:             globals.logger,
+		ErrChan:            globals.errChan,
+	}
+
+	globals.volume = fission.NewVolume(volumeConfig)
 
 	err = globals.volume.DoMount()
 	if err != nil {

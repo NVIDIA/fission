@@ -114,6 +114,7 @@ func main() {
 		signalChan      chan os.Signal
 		unixTimeNowNSec uint32
 		unixTimeNowSec  uint64
+		volumeConfig    *fission.VolumeConfig
 	)
 
 	if len(os.Args) != 2 {
@@ -194,7 +195,21 @@ func main() {
 
 	globals.alreadyLoggedIgnoring.setAttrInValidFH = false
 
-	globals.volume = fission.NewVolume(globals.volumeName, globals.mountPoint, fuseSubtype, maxRead, maxWrite, false, false, &globals, globals.logger, globals.errChan)
+	volumeConfig = &fission.VolumeConfig{
+		VolumeName:         globals.volumeName,
+		MountpointDirPath:  globals.mountPoint,
+		FuseSubtype:        fuseSubtype,
+		MaxRead:            maxRead,
+		MaxWrite:           maxWrite,
+		DefaultPermissions: false,
+		AllowOther:         false,
+		NumWorkers:         0,
+		Callbacks:          &globals,
+		Logger:             globals.logger,
+		ErrChan:            globals.errChan,
+	}
+
+	globals.volume = fission.NewVolume(volumeConfig)
 
 	err = globals.volume.DoMount()
 	if err != nil {

@@ -25,6 +25,17 @@ type Volume interface {
 	// safely discarded.
 	//
 	DoUnmount() (err error)
+
+	// HighLatencyCallback is called by any of the Callbacks as soon as the
+	// particular callback knows it is about to enter a high latency operation.
+	// As a result, a new worker will be launched and the current worker (i.e.
+	// the worker performing this soon-to-be high latency callback) will be
+	// marked to terminate once the callback returns thus maintaining the
+	// desired VolumeConfig.NumWorkers number of low latency workers polling
+	// /dev/fuse. It is ok to call this multiple times within the same callback
+	// context if it is inconvenient to remember if it has already been called.
+	//
+	HighLatencyCallback(inHeader *InHeader)
 }
 
 // Callbacks is the interface declaring the various callbacks that will be issued
@@ -82,15 +93,24 @@ type Callbacks interface {
 	DoStatX(inHeader *InHeader, statXIn *StatXIn) (statXOut *StatXOut, errno syscall.Errno)
 }
 
-// NewVolume is called to create a Volume instance. Various callbacks listed in the Callbacks
-// interface will be made while the Volume is mounted. The type of the file system, once mounted,
-// will be "fuse" and, if non-empty, followed by a "." and the fuseSubtype (if supported... as it
-// is on Linux). Non-root users may want to specify allowOther as TRUE to enable other non-root
-// users access to the mount point. A chan error is also supplied to enable the Volume to indicate
-// that it is no longer servicing FUSE upcalls (e.g. as a result of an intentional DoUnmount() call
-// or some unexpected error reading from /dev/fuse).
-func NewVolume(volumeName, mountpointDirPath, fuseSubtype string, maxRead, maxWrite uint32, defaultPermissions, allowOther bool, callbacks Callbacks, logger *log.Logger, errChan chan error) (volume Volume) {
-	volume = newVolume(volumeName, mountpointDirPath, fuseSubtype, maxRead, maxWrite, defaultPermissions, allowOther, callbacks, logger, errChan)
+// VolumeConfig is used to specify details about a Volume to be created via NewVolume.
+type VolumeConfig struct {
+	VolumeName         string      //
+	MountpointDirPath  string      //
+	FuseSubtype        string      // The type of the file system, once mounted, will be "fuse" and, if non-empty, followed by a "." and this .fuseSubtype
+	MaxRead            uint32      //
+	MaxWrite           uint32      //
+	DefaultPermissions bool        //
+	AllowOther         bool        // Non-root users may want to specify this as TRUE to enable other non-root users access to the mount point
+	NumWorkers         int         // Number of low-latency workers to poll /dev/fuse; If == 0, defaults to runtime.NumCPU()
+	Callbacks          Callbacks   // Various callbacks listed in the Callbacks interface will be made while the Volume is mounted
+	Logger             *log.Logger //
+	ErrChan            chan error  // Enables the Volume to indicate that it is no longer servicing FUSE upcalls (e.g. as a result of an intentional DoUnmount() call or some unexpected error reading from /dev/fuse)
+}
+
+// NewVolume is called to create a Volume instance as described by the supplied VolumeConfig.
+func NewVolume(volumeConfig *VolumeConfig) (volume Volume) {
+	volume = newVolume(volumeConfig)
 	return
 }
 
