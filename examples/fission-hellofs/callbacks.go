@@ -7,7 +7,7 @@ import (
 	"bytes"
 	"syscall"
 
-	"github.com/NVIDIA/fission/v3"
+	"github.com/NVIDIA/fission/v4"
 )
 
 func (*globalsStruct) DoLookup(inHeader *fission.InHeader, lookupIn *fission.LookupIn) (lookupOut *fission.LookupOut, errno syscall.Errno) {
