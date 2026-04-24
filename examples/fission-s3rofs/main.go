@@ -166,6 +166,7 @@ func main() {
 		s3Config                           aws.Config
 		signalChan                         chan os.Signal
 		timeAtLaunch                       time.Time = time.Now()
+		volumeConfig                       *fission.VolumeConfig
 	)
 
 	if len(os.Args) != 2 {
@@ -317,11 +318,11 @@ func main() {
 		Prefix: aws.String(globals.config.S3Prefix),
 	}
 	listObjectsV2Output = &s3.ListObjectsV2Output{
-		IsTruncated:           true,
+		IsTruncated:           aws.Bool(true),
 		NextContinuationToken: nil,
 	}
 
-	for listObjectsV2Output.IsTruncated {
+	for aws.ToBool(listObjectsV2Output.IsTruncated) {
 		listObjectsV2Input.ContinuationToken = listObjectsV2Output.NextContinuationToken
 
 		listObjectsV2Output, err = globals.s3Client.ListObjectsV2(context.TODO(), listObjectsV2Input)
@@ -400,7 +401,7 @@ func main() {
 
 			childInode = &inodeStruct{
 				inodeNumber:  uint64(len(globals.inodeTable) + 1),
-				size:         uint64(listObjectsV2OutputContentsElement.Size),
+				size:         uint64(aws.ToInt64(listObjectsV2OutputContentsElement.Size)),
 				lastModified: *listObjectsV2OutputContentsElement.LastModified,
 				mode:         fileMode,
 				linkCount:    1,
@@ -444,7 +445,21 @@ func main() {
 
 	globals.errChan = make(chan error, 1)
 
-	globals.volume = fission.NewVolume(path.Base(globals.config.MountPoint), globals.config.MountPoint, fuseSubtype, maxRead, maxWrite, false, false, &globals, globals.logger, globals.errChan)
+	volumeConfig = &fission.VolumeConfig{
+		VolumeName:         path.Base(globals.config.MountPoint),
+		MountpointDirPath:  globals.config.MountPoint,
+		FuseSubtype:        fuseSubtype,
+		MaxRead:            maxRead,
+		MaxWrite:           maxWrite,
+		DefaultPermissions: false,
+		AllowOther:         false,
+		NumWorkers:         0,
+		Callbacks:          &globals,
+		Logger:             globals.logger,
+		ErrChan:            globals.errChan,
+	}
+
+	globals.volume = fission.NewVolume(volumeConfig)
 
 	err = globals.volume.DoMount()
 	if err != nil {
