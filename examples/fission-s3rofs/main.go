@@ -18,7 +18,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/NVIDIA/fission/v3"
+	"github.com/NVIDIA/fission/v4"
 	"github.com/NVIDIA/sortedmap"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/aws/retry"

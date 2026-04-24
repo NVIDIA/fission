@@ -12,7 +12,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/NVIDIA/fission/v3"
+	"github.com/NVIDIA/fission/v4"
 	"golang.org/x/sys/unix"
 )
 
