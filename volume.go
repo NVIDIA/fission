@@ -10,6 +10,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"runtime"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -17,25 +18,26 @@ import (
 )
 
 type volumeStruct struct {
-	volumeName         string
-	mountpointDirPath  string
-	fuseSubtype        string
-	maxRead            uint32
-	maxWrite           uint32
-	defaultPermissions bool
-	allowOther         bool
-	callbacks          Callbacks
-	logger             *log.Logger
-	errChan            chan error
-	devFuseFDReadSize  uint32 // InHeaderSize + WriteInSize + InitOut.MaxWrite
-	devFuseFDReadPool  sync.Pool
-	devFuseFD          int
-	devFuseFile        *os.File
-	devFuseFDReaderWG  sync.WaitGroup
-	callbacksWG        sync.WaitGroup
-	fuseMajor          uint32
-	fuseMinor          uint32
-	doInitWG           sync.WaitGroup
+	volumeName                string
+	mountpointDirPath         string
+	fuseSubtype               string
+	maxRead                   uint32
+	maxWrite                  uint32
+	defaultPermissions        bool
+	allowOther                bool
+	numWorkers                int
+	callbacks                 Callbacks
+	logger                    *log.Logger
+	errChan                   chan error
+	errChanOnce               sync.Once
+	devFuseFDReadSize         uint32 // InHeaderSize + WriteInSize + InitOut.MaxWrite
+	devFuseFD                 int
+	devFuseFile               *os.File
+	devFuseFDReaderWG         sync.WaitGroup
+	devFuseFDReaderBlockedSet sync.Map
+	fuseMajor                 uint32
+	fuseMinor                 uint32
+	doInitWG                  sync.WaitGroup
 }
 
 const (
@@ -48,7 +50,7 @@ const (
 	devFuseFDReadSizeMin = 2 * 4096
 )
 
-func newVolume(volumeName, mountpointDirPath, fuseSubtype string, maxRead, maxWrite uint32, defaultPermissions, allowOther bool, callbacks Callbacks, logger *log.Logger, errChan chan error) (volume *volumeStruct) {
+func newVolume(volumeConfig *VolumeConfig) (volume *volumeStruct) {
 	var (
 		devFuseFDReadSize uint32
 	)
@@ -56,32 +58,31 @@ func newVolume(volumeName, mountpointDirPath, fuseSubtype string, maxRead, maxWr
 	// Note: The following assumes maxWrite is either zero (indicating a ReadOnly Volume)
 	//       or sufficiently large to make the WriteIn case the largest message possible
 	//
-	devFuseFDReadSize = InHeaderSize + WriteInFixedPortionSize + maxWrite
+	devFuseFDReadSize = InHeaderSize + WriteInFixedPortionSize + volumeConfig.MaxWrite
 	if devFuseFDReadSize < devFuseFDReadSizeMin {
 		devFuseFDReadSize = devFuseFDReadSizeMin
 	}
 
 	volume = &volumeStruct{
-		volumeName:         volumeName,
-		mountpointDirPath:  mountpointDirPath,
-		fuseSubtype:        fuseSubtype,
-		maxRead:            maxRead,
-		maxWrite:           maxWrite,
-		defaultPermissions: defaultPermissions,
-		allowOther:         allowOther,
-		callbacks:          callbacks,
-		logger:             logger,
-		errChan:            errChan,
+		volumeName:         volumeConfig.VolumeName,
+		mountpointDirPath:  volumeConfig.MountpointDirPath,
+		fuseSubtype:        volumeConfig.FuseSubtype,
+		maxRead:            volumeConfig.MaxRead,
+		maxWrite:           volumeConfig.MaxWrite,
+		defaultPermissions: volumeConfig.DefaultPermissions,
+		allowOther:         volumeConfig.AllowOther,
+		callbacks:          volumeConfig.Callbacks,
+		logger:             volumeConfig.Logger,
+		errChan:            volumeConfig.ErrChan,
 		devFuseFDReadSize:  devFuseFDReadSize,
 		fuseMajor:          0,
 		fuseMinor:          0,
 	}
 
-	volume.devFuseFDReadPool = sync.Pool{
-		New: func() interface{} {
-			buf := make([]byte, volume.devFuseFDReadSize) // len == cap
-			return &buf
-		},
+	if volumeConfig.NumWorkers == 0 {
+		volume.numWorkers = runtime.NumCPU()
+	} else {
+		volume.numWorkers = volumeConfig.NumWorkers
 	}
 
 	return
@@ -273,8 +274,17 @@ func (volume *volumeStruct) DoMount() (err error) {
 	volume.devFuseFD = childOpenFDs[0]
 	volume.devFuseFile = os.NewFile(uintptr(volume.devFuseFD), devLinuxFusePath)
 
-	volume.devFuseFDReaderWG.Add(1)
-	go volume.devFuseFDReader()
+	if volume.numWorkers <= 0 {
+		// Note that if volumeConfig.NumWorkers was zero, volume.numWorkers will be runtime.NumCPU() that is always positive
+		volume.logger.Printf("Volume %s DoMount() found negative NumWorkers: %v", volume.volumeName, volume.numWorkers)
+		return
+	}
+
+	volume.devFuseFDReaderWG.Add(volume.numWorkers)
+
+	for range volume.numWorkers {
+		go volume.devFuseFDReader()
+	}
 
 	err = mountCmd.Wait()
 	if err != nil {
@@ -324,6 +334,19 @@ func (volume *volumeStruct) DoUnmount() (err error) {
 	return
 }
 
+func (volume *volumeStruct) HighLatencyCallback(inHeader *InHeader) {
+	var (
+		wasSubstitutedAlready bool
+	)
+
+	_, wasSubstitutedAlready = volume.devFuseFDReaderBlockedSet.Load(inHeader)
+	if !wasSubstitutedAlready {
+		volume.devFuseFDReaderBlockedSet.Store(inHeader, struct{}{})
+		volume.devFuseFDReaderWG.Add(1)
+		go volume.devFuseFDReader()
+	}
+}
+
 func (volume *volumeStruct) scanPipe(name string, pipe io.ReadCloser, lineCount *uint32, wg *sync.WaitGroup) {
 	var (
 		pipeScanner *bufio.Scanner = bufio.NewScanner(pipe)
@@ -358,89 +381,72 @@ func (volume *volumeStruct) awaitScanPipe(wg *sync.WaitGroup, lineCount *uint32,
 	}
 }
 
-func (volume *volumeStruct) devFuseFDReadPoolGet() (devFuseFDReadBufPtr *[]byte) {
-	devFuseFDReadBufPtr = volume.devFuseFDReadPool.Get().(*[]byte)
-	return
-}
-
-func (volume *volumeStruct) devFuseFDReadPoolPut(devFuseFDReadBufPtr *[]byte) {
-	*devFuseFDReadBufPtr = (*devFuseFDReadBufPtr)[:cap(*devFuseFDReadBufPtr)] // len == cap
-	volume.devFuseFDReadPool.Put(devFuseFDReadBufPtr)
-}
-
 func (volume *volumeStruct) devFuseFDReader() {
 	var (
-		bytesRead           int
-		devFuseFDReadBuf    []byte
-		devFuseFDReadBufPtr *[]byte
-		err                 error
+		bytesRead        int
+		devFuseFDReadBuf = make([]byte, volume.devFuseFDReadSize)
+		err              error
+		wasSubstituted   bool
 	)
 
 	for {
-		devFuseFDReadBufPtr = volume.devFuseFDReadPoolGet()
-		devFuseFDReadBuf = *devFuseFDReadBufPtr
+		devFuseFDReadBuf = devFuseFDReadBuf[:volume.devFuseFDReadSize] // len == cap
 
-	RetrySyscallRead:
 		bytesRead, err = syscall.Read(volume.devFuseFD, devFuseFDReadBuf)
 		if err != nil {
-			// First check for EINTR
-
-			if err.Error() == "interrupted system call" {
-				goto RetrySyscallRead
-			}
-
-			// Now that we are not retrying syscall.Read(), discard devFuseFDReadBuf
-
-			*devFuseFDReadBufPtr = devFuseFDReadBuf
-			volume.devFuseFDReadPoolPut(devFuseFDReadBufPtr)
-
-			if err.Error() == "operation not permitted" {
-				// Special case... simply retry the Read
-				continue
-			}
-
-			// Time to exit...but first await outstanding Callbacks
-
-			volume.callbacksWG.Wait()
-			volume.devFuseFDReaderWG.Done()
-
-			// Signal errChan that we are exiting (passing <nil> if due to close of volume.devFuseFD)
-
 			switch err.Error() {
-			case "no such device":
-				volume.errChan <- nil
-			case "operation not supported by device":
-				volume.errChan <- nil
+			case "interrupted system call":
+				continue
+			case "operation not permitted":
+				continue
 			default:
-				volume.logger.Printf("Exiting due to /dev/fuse Read err: %v", err)
-				volume.errChan <- err
+				// Time to exit...
+
+				volume.devFuseFDReaderWG.Done()
+
+				// Signal errChan that we are exiting (passing <nil> if due to close of volume.devFuseFD)
+				// Note: Since all devFuseFDReader() instances will do this, we only need one of them
+
+				volume.errChanOnce.Do(func() {
+					switch err.Error() {
+					case "no such device":
+						volume.errChan <- nil
+					case "operation not supported by device":
+						volume.errChan <- nil
+					default:
+						volume.logger.Printf("Exiting due to /dev/fuse Read err: %v", err)
+						volume.errChan <- err
+					}
+				})
+
+				return
 			}
+		}
+
+		// Process devFuseFDReadBuf
+
+		devFuseFDReadBuf = devFuseFDReadBuf[:bytesRead]
+
+		wasSubstituted = volume.processDevFuseFDReadBuf(devFuseFDReadBuf)
+		if wasSubstituted {
+			// Time to exit...
+
+			volume.devFuseFDReaderWG.Done()
 
 			return
 		}
-
-		devFuseFDReadBuf = devFuseFDReadBuf[:bytesRead]
-		*devFuseFDReadBufPtr = devFuseFDReadBuf
-
-		// Dispatch goroutine to process devFuseFDReadBuf
-
-		volume.callbacksWG.Add(1)
-		go volume.processDevFuseFDReadBuf(devFuseFDReadBufPtr)
 	}
 }
 
-func (volume *volumeStruct) processDevFuseFDReadBuf(devFuseFDReadBufPtr *[]byte) {
+func (volume *volumeStruct) processDevFuseFDReadBuf(devFuseFDReadBuf []byte) (wasSubstituted bool) {
 	var (
-		devFuseFDReadBuf = *devFuseFDReadBufPtr
-		inHeader         *InHeader
+		inHeader *InHeader
 	)
 
 	if len(devFuseFDReadBuf) < InHeaderSize {
 		// All we can do is just drop it
 		volume.logger.Printf("Read malformed message from /dev/fuse")
-		*devFuseFDReadBufPtr = devFuseFDReadBuf
-		volume.devFuseFDReadPoolPut(devFuseFDReadBufPtr)
-		volume.callbacksWG.Done()
+		wasSubstituted = false
 		return
 	}
 
@@ -548,9 +554,9 @@ func (volume *volumeStruct) processDevFuseFDReadBuf(devFuseFDReadBufPtr *[]byte)
 		volume.devFuseFDWriter(inHeader, syscall.ENOSYS)
 	}
 
-	*devFuseFDReadBufPtr = devFuseFDReadBuf
-	volume.devFuseFDReadPoolPut(devFuseFDReadBufPtr)
-	volume.callbacksWG.Done()
+	_, wasSubstituted = volume.devFuseFDReaderBlockedSet.LoadAndDelete(inHeader)
+
+	return
 }
 
 func (volume *volumeStruct) devFuseFDWriter(inHeader *InHeader, errno syscall.Errno, bufs ...[]byte) {
