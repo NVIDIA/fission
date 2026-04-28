@@ -1,7 +1,7 @@
 # Copyright (c) 2015-2025, NVIDIA CORPORATION.
 # SPDX-License-Identifier: Apache-2.0
 
-FROM ubuntu:24.04 AS base
+FROM ubuntu:26.04 AS base
 
 RUN    apt-get update \
     && apt-get dist-upgrade -y
@@ -28,7 +28,7 @@ RUN    apt-get update \
                         vim \
                         wget
 
-ARG GolangVersion=1.23.5
+ARG GolangVersion=1.26.2
 ENV GolangBasename="go${GolangVersion}.linux-amd64.tar.gz"
 ENV GolangURL="https://golang.org/dl/${GolangBasename}"
 WORKDIR /tmp
