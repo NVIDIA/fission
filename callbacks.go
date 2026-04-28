@@ -28,7 +28,7 @@ func marshalAttr(attr *Attr, outPayload []byte, outPayloadOffset uint32) {
 	*(*uint32)(unsafe.Pointer(&outPayload[outPayloadOffset+84])) = attr.Padding
 }
 
-func (volume *volumeStruct) doLookup(inHeader *InHeader, devFuseFDReadBufPayload []byte) {
+func (volume *volumeStruct) doLookup(devFuseFDClone int, inHeader *InHeader, devFuseFDReadBufPayload []byte) {
 	var (
 		errno      syscall.Errno
 		lookupIn   *LookupIn
@@ -42,7 +42,7 @@ func (volume *volumeStruct) doLookup(inHeader *InHeader, devFuseFDReadBufPayload
 
 	lookupOut, errno = volume.callbacks.DoLookup(inHeader, lookupIn)
 	if errno != 0 {
-		volume.devFuseFDWriter(inHeader, errno)
+		volume.devFuseFDWriter(devFuseFDClone, inHeader, errno)
 		return
 	}
 
@@ -57,10 +57,10 @@ func (volume *volumeStruct) doLookup(inHeader *InHeader, devFuseFDReadBufPayload
 
 	marshalAttr(&lookupOut.EntryOut.Attr, outPayload, 40)
 
-	volume.devFuseFDWriter(inHeader, 0, outPayload)
+	volume.devFuseFDWriter(devFuseFDClone, inHeader, 0, outPayload)
 }
 
-func (volume *volumeStruct) doForget(inHeader *InHeader, devFuseFDReadBufPayload []byte) {
+func (volume *volumeStruct) doForget(_ int, inHeader *InHeader, devFuseFDReadBufPayload []byte) {
 	var (
 		forgetIn *ForgetIn
 	)
@@ -77,7 +77,7 @@ func (volume *volumeStruct) doForget(inHeader *InHeader, devFuseFDReadBufPayload
 	volume.callbacks.DoForget(inHeader, forgetIn)
 }
 
-func (volume *volumeStruct) doGetAttr(inHeader *InHeader, devFuseFDReadBufPayload []byte) {
+func (volume *volumeStruct) doGetAttr(devFuseFDClone int, inHeader *InHeader, devFuseFDReadBufPayload []byte) {
 	var (
 		errno      syscall.Errno
 		getAttrIn  *GetAttrIn
@@ -87,7 +87,7 @@ func (volume *volumeStruct) doGetAttr(inHeader *InHeader, devFuseFDReadBufPayloa
 
 	if len(devFuseFDReadBufPayload) != GetAttrInSize {
 		volume.logger.Printf("Call to doGetAttr() with bad len(devFuseFDReadBufPayload) == %v", len(devFuseFDReadBufPayload))
-		volume.devFuseFDWriter(inHeader, syscall.EINVAL)
+		volume.devFuseFDWriter(devFuseFDClone, inHeader, syscall.EINVAL)
 		return
 	}
 
@@ -99,7 +99,7 @@ func (volume *volumeStruct) doGetAttr(inHeader *InHeader, devFuseFDReadBufPayloa
 
 	getAttrOut, errno = volume.callbacks.DoGetAttr(inHeader, getAttrIn)
 	if errno != 0 {
-		volume.devFuseFDWriter(inHeader, errno)
+		volume.devFuseFDWriter(devFuseFDClone, inHeader, errno)
 		return
 	}
 
@@ -111,10 +111,10 @@ func (volume *volumeStruct) doGetAttr(inHeader *InHeader, devFuseFDReadBufPayloa
 
 	marshalAttr(&getAttrOut.Attr, outPayload, 16)
 
-	volume.devFuseFDWriter(inHeader, 0, outPayload)
+	volume.devFuseFDWriter(devFuseFDClone, inHeader, 0, outPayload)
 }
 
-func (volume *volumeStruct) doSetAttr(inHeader *InHeader, devFuseFDReadBufPayload []byte) {
+func (volume *volumeStruct) doSetAttr(devFuseFDClone int, inHeader *InHeader, devFuseFDReadBufPayload []byte) {
 	var (
 		errno      syscall.Errno
 		outPayload []byte
@@ -124,7 +124,7 @@ func (volume *volumeStruct) doSetAttr(inHeader *InHeader, devFuseFDReadBufPayloa
 
 	if len(devFuseFDReadBufPayload) != SetAttrInSize {
 		volume.logger.Printf("Call to doSetAttr() with bad len(devFuseFDReadBufPayload) == %v", len(devFuseFDReadBufPayload))
-		volume.devFuseFDWriter(inHeader, syscall.EINVAL)
+		volume.devFuseFDWriter(devFuseFDClone, inHeader, syscall.EINVAL)
 		return
 	}
 
@@ -149,7 +149,7 @@ func (volume *volumeStruct) doSetAttr(inHeader *InHeader, devFuseFDReadBufPayloa
 
 	setAttrOut, errno = volume.callbacks.DoSetAttr(inHeader, setAttrIn)
 	if errno != 0 {
-		volume.devFuseFDWriter(inHeader, errno)
+		volume.devFuseFDWriter(devFuseFDClone, inHeader, errno)
 		return
 	}
 
@@ -161,10 +161,10 @@ func (volume *volumeStruct) doSetAttr(inHeader *InHeader, devFuseFDReadBufPayloa
 
 	marshalAttr(&setAttrOut.Attr, outPayload, 16)
 
-	volume.devFuseFDWriter(inHeader, 0, outPayload)
+	volume.devFuseFDWriter(devFuseFDClone, inHeader, 0, outPayload)
 }
 
-func (volume *volumeStruct) doReadLink(inHeader *InHeader, devFuseFDReadBufPayload []byte) {
+func (volume *volumeStruct) doReadLink(devFuseFDClone int, inHeader *InHeader, devFuseFDReadBufPayload []byte) {
 	var (
 		errno       syscall.Errno
 		outPayload  []byte
@@ -173,22 +173,22 @@ func (volume *volumeStruct) doReadLink(inHeader *InHeader, devFuseFDReadBufPaylo
 
 	if len(devFuseFDReadBufPayload) != 0 {
 		volume.logger.Printf("Call to doReadLink() with bad len(devFuseFDReadBufPayload) == %v", len(devFuseFDReadBufPayload))
-		volume.devFuseFDWriter(inHeader, syscall.EINVAL)
+		volume.devFuseFDWriter(devFuseFDClone, inHeader, syscall.EINVAL)
 		return
 	}
 
 	readLinkOut, errno = volume.callbacks.DoReadLink(inHeader)
 	if errno != 0 {
-		volume.devFuseFDWriter(inHeader, errno)
+		volume.devFuseFDWriter(devFuseFDClone, inHeader, errno)
 		return
 	}
 
 	outPayload = readLinkOut.Data
 
-	volume.devFuseFDWriter(inHeader, 0, outPayload)
+	volume.devFuseFDWriter(devFuseFDClone, inHeader, 0, outPayload)
 }
 
-func (volume *volumeStruct) doSymLink(inHeader *InHeader, devFuseFDReadBufPayload []byte) {
+func (volume *volumeStruct) doSymLink(devFuseFDClone int, inHeader *InHeader, devFuseFDReadBufPayload []byte) {
 	var (
 		errno         syscall.Errno
 		nameDataSplit [][]byte
@@ -200,7 +200,7 @@ func (volume *volumeStruct) doSymLink(inHeader *InHeader, devFuseFDReadBufPayloa
 	nameDataSplit = bytes.SplitN(devFuseFDReadBufPayload, []byte{0}, 2)
 	if len(nameDataSplit) != 2 {
 		volume.logger.Printf("Call to doSymLink() with bad devFuseFDReadBufPayload")
-		volume.devFuseFDWriter(inHeader, syscall.EINVAL)
+		volume.devFuseFDWriter(devFuseFDClone, inHeader, syscall.EINVAL)
 		return
 	}
 
@@ -211,7 +211,7 @@ func (volume *volumeStruct) doSymLink(inHeader *InHeader, devFuseFDReadBufPayloa
 
 	symLinkOut, errno = volume.callbacks.DoSymLink(inHeader, symLinkIn)
 	if errno != 0 {
-		volume.devFuseFDWriter(inHeader, errno)
+		volume.devFuseFDWriter(devFuseFDClone, inHeader, errno)
 		return
 	}
 
@@ -226,10 +226,10 @@ func (volume *volumeStruct) doSymLink(inHeader *InHeader, devFuseFDReadBufPayloa
 
 	marshalAttr(&symLinkOut.EntryOut.Attr, outPayload, 40)
 
-	volume.devFuseFDWriter(inHeader, 0, outPayload)
+	volume.devFuseFDWriter(devFuseFDClone, inHeader, 0, outPayload)
 }
 
-func (volume *volumeStruct) doMkNod(inHeader *InHeader, devFuseFDReadBufPayload []byte) {
+func (volume *volumeStruct) doMkNod(devFuseFDClone int, inHeader *InHeader, devFuseFDReadBufPayload []byte) {
 	var (
 		errno      syscall.Errno
 		mkNodIn    *MkNodIn
@@ -239,7 +239,7 @@ func (volume *volumeStruct) doMkNod(inHeader *InHeader, devFuseFDReadBufPayload 
 
 	if len(devFuseFDReadBufPayload) < MkNodInFixedPortionSize {
 		volume.logger.Printf("Call to doMkNod() with bad len(devFuseFDReadBufPayload) == %v", len(devFuseFDReadBufPayload))
-		volume.devFuseFDWriter(inHeader, syscall.EINVAL)
+		volume.devFuseFDWriter(devFuseFDClone, inHeader, syscall.EINVAL)
 		return
 	}
 
@@ -253,7 +253,7 @@ func (volume *volumeStruct) doMkNod(inHeader *InHeader, devFuseFDReadBufPayload 
 
 	mkNodOut, errno = volume.callbacks.DoMkNod(inHeader, mkNodIn)
 	if errno != 0 {
-		volume.devFuseFDWriter(inHeader, errno)
+		volume.devFuseFDWriter(devFuseFDClone, inHeader, errno)
 		return
 	}
 
@@ -268,10 +268,10 @@ func (volume *volumeStruct) doMkNod(inHeader *InHeader, devFuseFDReadBufPayload 
 
 	marshalAttr(&mkNodOut.EntryOut.Attr, outPayload, 40)
 
-	volume.devFuseFDWriter(inHeader, 0, outPayload)
+	volume.devFuseFDWriter(devFuseFDClone, inHeader, 0, outPayload)
 }
 
-func (volume *volumeStruct) doMkDir(inHeader *InHeader, devFuseFDReadBufPayload []byte) {
+func (volume *volumeStruct) doMkDir(devFuseFDClone int, inHeader *InHeader, devFuseFDReadBufPayload []byte) {
 	var (
 		errno      syscall.Errno
 		mkDirIn    *MkDirIn
@@ -281,7 +281,7 @@ func (volume *volumeStruct) doMkDir(inHeader *InHeader, devFuseFDReadBufPayload 
 
 	if len(devFuseFDReadBufPayload) < MkDirInFixedPortionSize {
 		volume.logger.Printf("Call to doMkNod() with bad len(devFuseFDReadBufPayload) == %v", len(devFuseFDReadBufPayload))
-		volume.devFuseFDWriter(inHeader, syscall.EINVAL)
+		volume.devFuseFDWriter(devFuseFDClone, inHeader, syscall.EINVAL)
 		return
 	}
 
@@ -293,7 +293,7 @@ func (volume *volumeStruct) doMkDir(inHeader *InHeader, devFuseFDReadBufPayload 
 
 	mkDirOut, errno = volume.callbacks.DoMkDir(inHeader, mkDirIn)
 	if errno != 0 {
-		volume.devFuseFDWriter(inHeader, errno)
+		volume.devFuseFDWriter(devFuseFDClone, inHeader, errno)
 		return
 	}
 
@@ -308,10 +308,10 @@ func (volume *volumeStruct) doMkDir(inHeader *InHeader, devFuseFDReadBufPayload 
 
 	marshalAttr(&mkDirOut.EntryOut.Attr, outPayload, 40)
 
-	volume.devFuseFDWriter(inHeader, 0, outPayload)
+	volume.devFuseFDWriter(devFuseFDClone, inHeader, 0, outPayload)
 }
 
-func (volume *volumeStruct) doUnlink(inHeader *InHeader, devFuseFDReadBufPayload []byte) {
+func (volume *volumeStruct) doUnlink(devFuseFDClone int, inHeader *InHeader, devFuseFDReadBufPayload []byte) {
 	var (
 		errno    syscall.Errno
 		unlinkIn *UnlinkIn
@@ -323,10 +323,10 @@ func (volume *volumeStruct) doUnlink(inHeader *InHeader, devFuseFDReadBufPayload
 
 	errno = volume.callbacks.DoUnlink(inHeader, unlinkIn)
 
-	volume.devFuseFDWriter(inHeader, errno)
+	volume.devFuseFDWriter(devFuseFDClone, inHeader, errno)
 }
 
-func (volume *volumeStruct) doRmDir(inHeader *InHeader, devFuseFDReadBufPayload []byte) {
+func (volume *volumeStruct) doRmDir(devFuseFDClone int, inHeader *InHeader, devFuseFDReadBufPayload []byte) {
 	var (
 		errno   syscall.Errno
 		rmDirIn *RmDirIn
@@ -338,10 +338,10 @@ func (volume *volumeStruct) doRmDir(inHeader *InHeader, devFuseFDReadBufPayload 
 
 	errno = volume.callbacks.DoRmDir(inHeader, rmDirIn)
 
-	volume.devFuseFDWriter(inHeader, errno)
+	volume.devFuseFDWriter(devFuseFDClone, inHeader, errno)
 }
 
-func (volume *volumeStruct) doRename(inHeader *InHeader, devFuseFDReadBufPayload []byte) {
+func (volume *volumeStruct) doRename(devFuseFDClone int, inHeader *InHeader, devFuseFDReadBufPayload []byte) {
 	var (
 		errno               syscall.Errno
 		oldNameNewNameSplit [][]byte
@@ -350,14 +350,14 @@ func (volume *volumeStruct) doRename(inHeader *InHeader, devFuseFDReadBufPayload
 
 	if len(devFuseFDReadBufPayload) < RenameInFixedPortionSize {
 		volume.logger.Printf("Call to doRename() with bad len(devFuseFDReadBufPayload) == %v", len(devFuseFDReadBufPayload))
-		volume.devFuseFDWriter(inHeader, syscall.EINVAL)
+		volume.devFuseFDWriter(devFuseFDClone, inHeader, syscall.EINVAL)
 		return
 	}
 
 	oldNameNewNameSplit = bytes.SplitN(devFuseFDReadBufPayload[RenameInFixedPortionSize:], []byte{0}, 2)
 	if len(oldNameNewNameSplit) != 2 {
 		volume.logger.Printf("Call to doRename() with bad devFuseFDReadBufPayload")
-		volume.devFuseFDWriter(inHeader, syscall.EINVAL)
+		volume.devFuseFDWriter(devFuseFDClone, inHeader, syscall.EINVAL)
 		return
 	}
 
@@ -369,10 +369,10 @@ func (volume *volumeStruct) doRename(inHeader *InHeader, devFuseFDReadBufPayload
 
 	errno = volume.callbacks.DoRename(inHeader, renameIn)
 
-	volume.devFuseFDWriter(inHeader, errno)
+	volume.devFuseFDWriter(devFuseFDClone, inHeader, errno)
 }
 
-func (volume *volumeStruct) doLink(inHeader *InHeader, devFuseFDReadBufPayload []byte) {
+func (volume *volumeStruct) doLink(devFuseFDClone int, inHeader *InHeader, devFuseFDReadBufPayload []byte) {
 	var (
 		errno      syscall.Errno
 		linkIn     *LinkIn
@@ -382,7 +382,7 @@ func (volume *volumeStruct) doLink(inHeader *InHeader, devFuseFDReadBufPayload [
 
 	if len(devFuseFDReadBufPayload) < LinkInFixedPortionSize {
 		volume.logger.Printf("Call to doLink() with bad len(devFuseFDReadBufPayload) == %v", len(devFuseFDReadBufPayload))
-		volume.devFuseFDWriter(inHeader, syscall.EINVAL)
+		volume.devFuseFDWriter(devFuseFDClone, inHeader, syscall.EINVAL)
 		return
 	}
 
@@ -393,7 +393,7 @@ func (volume *volumeStruct) doLink(inHeader *InHeader, devFuseFDReadBufPayload [
 
 	linkOut, errno = volume.callbacks.DoLink(inHeader, linkIn)
 	if errno != 0 {
-		volume.devFuseFDWriter(inHeader, errno)
+		volume.devFuseFDWriter(devFuseFDClone, inHeader, errno)
 		return
 	}
 
@@ -408,10 +408,10 @@ func (volume *volumeStruct) doLink(inHeader *InHeader, devFuseFDReadBufPayload [
 
 	marshalAttr(&linkOut.EntryOut.Attr, outPayload, 40)
 
-	volume.devFuseFDWriter(inHeader, 0, outPayload)
+	volume.devFuseFDWriter(devFuseFDClone, inHeader, 0, outPayload)
 }
 
-func (volume *volumeStruct) doOpen(inHeader *InHeader, devFuseFDReadBufPayload []byte) {
+func (volume *volumeStruct) doOpen(devFuseFDClone int, inHeader *InHeader, devFuseFDReadBufPayload []byte) {
 	var (
 		errno      syscall.Errno
 		openIn     *OpenIn
@@ -421,7 +421,7 @@ func (volume *volumeStruct) doOpen(inHeader *InHeader, devFuseFDReadBufPayload [
 
 	if len(devFuseFDReadBufPayload) != OpenInSize {
 		volume.logger.Printf("Call to doOpen() with bad len(devFuseFDReadBufPayload) == %v", len(devFuseFDReadBufPayload))
-		volume.devFuseFDWriter(inHeader, syscall.EINVAL)
+		volume.devFuseFDWriter(devFuseFDClone, inHeader, syscall.EINVAL)
 		return
 	}
 
@@ -432,7 +432,7 @@ func (volume *volumeStruct) doOpen(inHeader *InHeader, devFuseFDReadBufPayload [
 
 	openOut, errno = volume.callbacks.DoOpen(inHeader, openIn)
 	if errno != 0 {
-		volume.devFuseFDWriter(inHeader, errno)
+		volume.devFuseFDWriter(devFuseFDClone, inHeader, errno)
 		return
 	}
 
@@ -442,10 +442,10 @@ func (volume *volumeStruct) doOpen(inHeader *InHeader, devFuseFDReadBufPayload [
 	*(*uint32)(unsafe.Pointer(&outPayload[8])) = openOut.OpenFlags
 	*(*uint32)(unsafe.Pointer(&outPayload[12])) = openOut.Padding
 
-	volume.devFuseFDWriter(inHeader, 0, outPayload)
+	volume.devFuseFDWriter(devFuseFDClone, inHeader, 0, outPayload)
 }
 
-func (volume *volumeStruct) doRead(inHeader *InHeader, devFuseFDReadBufPayload []byte) {
+func (volume *volumeStruct) doRead(devFuseFDClone int, inHeader *InHeader, devFuseFDReadBufPayload []byte) {
 	var (
 		errno      syscall.Errno
 		outPayload []byte
@@ -455,7 +455,7 @@ func (volume *volumeStruct) doRead(inHeader *InHeader, devFuseFDReadBufPayload [
 
 	if len(devFuseFDReadBufPayload) != ReadInSize {
 		volume.logger.Printf("Call to doRead() with bad len(devFuseFDReadBufPayload) == %v", len(devFuseFDReadBufPayload))
-		volume.devFuseFDWriter(inHeader, syscall.EINVAL)
+		volume.devFuseFDWriter(devFuseFDClone, inHeader, syscall.EINVAL)
 		return
 	}
 
@@ -471,16 +471,16 @@ func (volume *volumeStruct) doRead(inHeader *InHeader, devFuseFDReadBufPayload [
 
 	readOut, errno = volume.callbacks.DoRead(inHeader, readIn)
 	if errno != 0 {
-		volume.devFuseFDWriter(inHeader, errno)
+		volume.devFuseFDWriter(devFuseFDClone, inHeader, errno)
 		return
 	}
 
 	outPayload = readOut.Data
 
-	volume.devFuseFDWriter(inHeader, 0, outPayload)
+	volume.devFuseFDWriter(devFuseFDClone, inHeader, 0, outPayload)
 }
 
-func (volume *volumeStruct) doWrite(inHeader *InHeader, devFuseFDReadBufPayload []byte) {
+func (volume *volumeStruct) doWrite(devFuseFDClone int, inHeader *InHeader, devFuseFDReadBufPayload []byte) {
 	var (
 		errno      syscall.Errno
 		outPayload []byte
@@ -490,7 +490,7 @@ func (volume *volumeStruct) doWrite(inHeader *InHeader, devFuseFDReadBufPayload 
 
 	if len(devFuseFDReadBufPayload) < WriteInFixedPortionSize {
 		volume.logger.Printf("Call to doWrite() with bad len(devFuseFDReadBufPayload) == %v", len(devFuseFDReadBufPayload))
-		volume.devFuseFDWriter(inHeader, syscall.EINVAL)
+		volume.devFuseFDWriter(devFuseFDClone, inHeader, syscall.EINVAL)
 		return
 	}
 
@@ -507,13 +507,13 @@ func (volume *volumeStruct) doWrite(inHeader *InHeader, devFuseFDReadBufPayload 
 
 	if len(writeIn.Data) != int(writeIn.Size) {
 		volume.logger.Printf("Call to doWrite() with bad Size == %v expected %v", writeIn.Size, len(writeIn.Data))
-		volume.devFuseFDWriter(inHeader, syscall.EINVAL)
+		volume.devFuseFDWriter(devFuseFDClone, inHeader, syscall.EINVAL)
 		return
 	}
 
 	writeOut, errno = volume.callbacks.DoWrite(inHeader, writeIn)
 	if errno != 0 {
-		volume.devFuseFDWriter(inHeader, errno)
+		volume.devFuseFDWriter(devFuseFDClone, inHeader, errno)
 		return
 	}
 
@@ -522,10 +522,10 @@ func (volume *volumeStruct) doWrite(inHeader *InHeader, devFuseFDReadBufPayload 
 	*(*uint32)(unsafe.Pointer(&outPayload[0])) = writeOut.Size
 	*(*uint32)(unsafe.Pointer(&outPayload[4])) = writeOut.Padding
 
-	volume.devFuseFDWriter(inHeader, 0, outPayload)
+	volume.devFuseFDWriter(devFuseFDClone, inHeader, 0, outPayload)
 }
 
-func (volume *volumeStruct) doStatFS(inHeader *InHeader, devFuseFDReadBufPayload []byte) {
+func (volume *volumeStruct) doStatFS(devFuseFDClone int, inHeader *InHeader, devFuseFDReadBufPayload []byte) {
 	var (
 		errno      syscall.Errno
 		outPayload []byte
@@ -534,13 +534,13 @@ func (volume *volumeStruct) doStatFS(inHeader *InHeader, devFuseFDReadBufPayload
 
 	if len(devFuseFDReadBufPayload) != 0 {
 		volume.logger.Printf("Call to doStatFS() with bad len(devFuseFDReadBufPayload) == %v", len(devFuseFDReadBufPayload))
-		volume.devFuseFDWriter(inHeader, syscall.EINVAL)
+		volume.devFuseFDWriter(devFuseFDClone, inHeader, syscall.EINVAL)
 		return
 	}
 
 	statFSOut, errno = volume.callbacks.DoStatFS(inHeader)
 	if errno != 0 {
-		volume.devFuseFDWriter(inHeader, errno)
+		volume.devFuseFDWriter(devFuseFDClone, inHeader, errno)
 		return
 	}
 
@@ -562,10 +562,10 @@ func (volume *volumeStruct) doStatFS(inHeader *InHeader, devFuseFDReadBufPayload
 	*(*uint32)(unsafe.Pointer(&outPayload[72])) = statFSOut.Spare[4]
 	*(*uint32)(unsafe.Pointer(&outPayload[76])) = statFSOut.Spare[5]
 
-	volume.devFuseFDWriter(inHeader, 0, outPayload)
+	volume.devFuseFDWriter(devFuseFDClone, inHeader, 0, outPayload)
 }
 
-func (volume *volumeStruct) doRelease(inHeader *InHeader, devFuseFDReadBufPayload []byte) {
+func (volume *volumeStruct) doRelease(devFuseFDClone int, inHeader *InHeader, devFuseFDReadBufPayload []byte) {
 	var (
 		errno     syscall.Errno
 		releaseIn *ReleaseIn
@@ -573,7 +573,7 @@ func (volume *volumeStruct) doRelease(inHeader *InHeader, devFuseFDReadBufPayloa
 
 	if len(devFuseFDReadBufPayload) != ReleaseInSize {
 		volume.logger.Printf("Call to doRelease() with bad len(devFuseFDReadBufPayload) == %v", len(devFuseFDReadBufPayload))
-		volume.devFuseFDWriter(inHeader, syscall.EINVAL)
+		volume.devFuseFDWriter(devFuseFDClone, inHeader, syscall.EINVAL)
 		return
 	}
 
@@ -586,10 +586,10 @@ func (volume *volumeStruct) doRelease(inHeader *InHeader, devFuseFDReadBufPayloa
 
 	errno = volume.callbacks.DoRelease(inHeader, releaseIn)
 
-	volume.devFuseFDWriter(inHeader, errno)
+	volume.devFuseFDWriter(devFuseFDClone, inHeader, errno)
 }
 
-func (volume *volumeStruct) doFSync(inHeader *InHeader, devFuseFDReadBufPayload []byte) {
+func (volume *volumeStruct) doFSync(devFuseFDClone int, inHeader *InHeader, devFuseFDReadBufPayload []byte) {
 	var (
 		errno   syscall.Errno
 		fSyncIn *FSyncIn
@@ -597,7 +597,7 @@ func (volume *volumeStruct) doFSync(inHeader *InHeader, devFuseFDReadBufPayload 
 
 	if len(devFuseFDReadBufPayload) != FSyncInSize {
 		volume.logger.Printf("Call to doFSync() with bad len(devFuseFDReadBufPayload) == %v", len(devFuseFDReadBufPayload))
-		volume.devFuseFDWriter(inHeader, syscall.EINVAL)
+		volume.devFuseFDWriter(devFuseFDClone, inHeader, syscall.EINVAL)
 		return
 	}
 
@@ -609,10 +609,10 @@ func (volume *volumeStruct) doFSync(inHeader *InHeader, devFuseFDReadBufPayload 
 
 	errno = volume.callbacks.DoFSync(inHeader, fSyncIn)
 
-	volume.devFuseFDWriter(inHeader, errno)
+	volume.devFuseFDWriter(devFuseFDClone, inHeader, errno)
 }
 
-func (volume *volumeStruct) doSetXAttr(inHeader *InHeader, devFuseFDReadBufPayload []byte) {
+func (volume *volumeStruct) doSetXAttr(devFuseFDClone int, inHeader *InHeader, devFuseFDReadBufPayload []byte) {
 	var (
 		errno          syscall.Errno
 		nameDataSplit  [][]byte
@@ -622,14 +622,14 @@ func (volume *volumeStruct) doSetXAttr(inHeader *InHeader, devFuseFDReadBufPaylo
 
 	if len(devFuseFDReadBufPayload) < SetXAttrInFixedPortionSize {
 		volume.logger.Printf("Call to doSetXAttr() with bad len(devFuseFDReadBufPayload) == %v", len(devFuseFDReadBufPayload))
-		volume.devFuseFDWriter(inHeader, syscall.EINVAL)
+		volume.devFuseFDWriter(devFuseFDClone, inHeader, syscall.EINVAL)
 		return
 	}
 
 	nameDataSplit = bytes.SplitN(devFuseFDReadBufPayload[SetXAttrInFixedPortionSize:], []byte{0}, 2)
 	if len(nameDataSplit) != 2 {
 		volume.logger.Printf("Call to doSetXAttr() with bad devFuseFDReadBufPayload")
-		volume.devFuseFDWriter(inHeader, syscall.EINVAL)
+		volume.devFuseFDWriter(devFuseFDClone, inHeader, syscall.EINVAL)
 		return
 	}
 
@@ -646,16 +646,16 @@ func (volume *volumeStruct) doSetXAttr(inHeader *InHeader, devFuseFDReadBufPaylo
 
 	if len(devFuseFDReadBufPayload) != setXAttrInSize {
 		volume.logger.Printf("Call to doSetXAttr() with bad Size == %v expected %v", setXAttrIn.Size, setXAttrInSize)
-		volume.devFuseFDWriter(inHeader, syscall.EINVAL)
+		volume.devFuseFDWriter(devFuseFDClone, inHeader, syscall.EINVAL)
 		return
 	}
 
 	errno = volume.callbacks.DoSetXAttr(inHeader, setXAttrIn)
 
-	volume.devFuseFDWriter(inHeader, errno)
+	volume.devFuseFDWriter(devFuseFDClone, inHeader, errno)
 }
 
-func (volume *volumeStruct) doGetXAttr(inHeader *InHeader, devFuseFDReadBufPayload []byte) {
+func (volume *volumeStruct) doGetXAttr(devFuseFDClone int, inHeader *InHeader, devFuseFDReadBufPayload []byte) {
 	var (
 		errno       syscall.Errno
 		getXAttrIn  *GetXAttrIn
@@ -665,7 +665,7 @@ func (volume *volumeStruct) doGetXAttr(inHeader *InHeader, devFuseFDReadBufPaylo
 
 	if len(devFuseFDReadBufPayload) < GetXAttrInFixedPortionSize {
 		volume.logger.Printf("Call to doGetXAttr() with bad len(devFuseFDReadBufPayload) == %v", len(devFuseFDReadBufPayload))
-		volume.devFuseFDWriter(inHeader, syscall.EINVAL)
+		volume.devFuseFDWriter(devFuseFDClone, inHeader, syscall.EINVAL)
 		return
 	}
 
@@ -677,7 +677,7 @@ func (volume *volumeStruct) doGetXAttr(inHeader *InHeader, devFuseFDReadBufPaylo
 
 	getXAttrOut, errno = volume.callbacks.DoGetXAttr(inHeader, getXAttrIn)
 	if errno != 0 {
-		volume.devFuseFDWriter(inHeader, errno)
+		volume.devFuseFDWriter(devFuseFDClone, inHeader, errno)
 		return
 	}
 
@@ -690,10 +690,10 @@ func (volume *volumeStruct) doGetXAttr(inHeader *InHeader, devFuseFDReadBufPaylo
 		outPayload = getXAttrOut.Data
 	}
 
-	volume.devFuseFDWriter(inHeader, 0, outPayload)
+	volume.devFuseFDWriter(devFuseFDClone, inHeader, 0, outPayload)
 }
 
-func (volume *volumeStruct) doListXAttr(inHeader *InHeader, devFuseFDReadBufPayload []byte) {
+func (volume *volumeStruct) doListXAttr(devFuseFDClone int, inHeader *InHeader, devFuseFDReadBufPayload []byte) {
 	var (
 		errno            syscall.Errno
 		listXAttrIn      *ListXAttrIn
@@ -706,7 +706,7 @@ func (volume *volumeStruct) doListXAttr(inHeader *InHeader, devFuseFDReadBufPayl
 
 	if len(devFuseFDReadBufPayload) != ListXAttrInSize {
 		volume.logger.Printf("Call to doListXAttr() with bad len(devFuseFDReadBufPayload) == %v", len(devFuseFDReadBufPayload))
-		volume.devFuseFDWriter(inHeader, syscall.EINVAL)
+		volume.devFuseFDWriter(devFuseFDClone, inHeader, syscall.EINVAL)
 		return
 	}
 
@@ -717,7 +717,7 @@ func (volume *volumeStruct) doListXAttr(inHeader *InHeader, devFuseFDReadBufPayl
 
 	listXAttrOut, errno = volume.callbacks.DoListXAttr(inHeader, listXAttrIn)
 	if errno != 0 {
-		volume.devFuseFDWriter(inHeader, errno)
+		volume.devFuseFDWriter(devFuseFDClone, inHeader, errno)
 		return
 	}
 
@@ -746,10 +746,10 @@ func (volume *volumeStruct) doListXAttr(inHeader *InHeader, devFuseFDReadBufPayl
 		}
 	}
 
-	volume.devFuseFDWriter(inHeader, 0, outPayload)
+	volume.devFuseFDWriter(devFuseFDClone, inHeader, 0, outPayload)
 }
 
-func (volume *volumeStruct) doRemoveXAttr(inHeader *InHeader, devFuseFDReadBufPayload []byte) {
+func (volume *volumeStruct) doRemoveXAttr(devFuseFDClone int, inHeader *InHeader, devFuseFDReadBufPayload []byte) {
 	var (
 		errno         syscall.Errno
 		removeXAttrIn *RemoveXAttrIn
@@ -761,10 +761,10 @@ func (volume *volumeStruct) doRemoveXAttr(inHeader *InHeader, devFuseFDReadBufPa
 
 	errno = volume.callbacks.DoRemoveXAttr(inHeader, removeXAttrIn)
 
-	volume.devFuseFDWriter(inHeader, errno)
+	volume.devFuseFDWriter(devFuseFDClone, inHeader, errno)
 }
 
-func (volume *volumeStruct) doFlush(inHeader *InHeader, devFuseFDReadBufPayload []byte) {
+func (volume *volumeStruct) doFlush(devFuseFDClone int, inHeader *InHeader, devFuseFDReadBufPayload []byte) {
 	var (
 		errno   syscall.Errno
 		flushIn *FlushIn
@@ -772,7 +772,7 @@ func (volume *volumeStruct) doFlush(inHeader *InHeader, devFuseFDReadBufPayload 
 
 	if len(devFuseFDReadBufPayload) != FlushInSize {
 		volume.logger.Printf("Call to doFlush() with bad len(devFuseFDReadBufPayload) == %v", len(devFuseFDReadBufPayload))
-		volume.devFuseFDWriter(inHeader, syscall.EINVAL)
+		volume.devFuseFDWriter(devFuseFDClone, inHeader, syscall.EINVAL)
 		return
 	}
 
@@ -785,10 +785,10 @@ func (volume *volumeStruct) doFlush(inHeader *InHeader, devFuseFDReadBufPayload 
 
 	errno = volume.callbacks.DoFlush(inHeader, flushIn)
 
-	volume.devFuseFDWriter(inHeader, errno)
+	volume.devFuseFDWriter(devFuseFDClone, inHeader, errno)
 }
 
-func (volume *volumeStruct) doInit(inHeader *InHeader, devFuseFDReadBufPayload []byte) {
+func (volume *volumeStruct) doInit(devFuseFDClone int, inHeader *InHeader, devFuseFDReadBufPayload []byte) {
 	var (
 		errno      syscall.Errno
 		initIn     *InitIn
@@ -800,7 +800,7 @@ func (volume *volumeStruct) doInit(inHeader *InHeader, devFuseFDReadBufPayload [
 
 	if len(devFuseFDReadBufPayload) < InitInMinSize {
 		volume.logger.Printf("Call to doInit() with bad len(devFuseFDReadBufPayload) == %v", len(devFuseFDReadBufPayload))
-		volume.devFuseFDWriter(inHeader, syscall.EINVAL)
+		volume.devFuseFDWriter(devFuseFDClone, inHeader, syscall.EINVAL)
 		return
 	}
 
@@ -809,7 +809,7 @@ func (volume *volumeStruct) doInit(inHeader *InHeader, devFuseFDReadBufPayload [
 
 	if volume.fuseMajor != 7 {
 		volume.logger.Printf("Call to doInit() with bad InitIn.Major == %v [must be 7]", volume.fuseMajor)
-		volume.devFuseFDWriter(inHeader, syscall.EINVAL)
+		volume.devFuseFDWriter(devFuseFDClone, inHeader, syscall.EINVAL)
 		return
 	}
 
@@ -817,7 +817,7 @@ func (volume *volumeStruct) doInit(inHeader *InHeader, devFuseFDReadBufPayload [
 	case volume.fuseMinor == 17:
 		if len(devFuseFDReadBufPayload) != InitInUpThru735Size {
 			volume.logger.Printf("Call to doInit() with bad len(devFuseFDReadBufPayload) == %v", len(devFuseFDReadBufPayload))
-			volume.devFuseFDWriter(inHeader, syscall.EINVAL)
+			volume.devFuseFDWriter(devFuseFDClone, inHeader, syscall.EINVAL)
 			return
 		}
 		initIn = &InitIn{
@@ -830,7 +830,7 @@ func (volume *volumeStruct) doInit(inHeader *InHeader, devFuseFDReadBufPayload [
 	case (volume.fuseMinor >= 21) && (volume.fuseMinor <= 30):
 		if len(devFuseFDReadBufPayload) != InitInUpThru735Size {
 			volume.logger.Printf("Call to doInit() with bad len(devFuseFDReadBufPayload) == %v", len(devFuseFDReadBufPayload))
-			volume.devFuseFDWriter(inHeader, syscall.EINVAL)
+			volume.devFuseFDWriter(devFuseFDClone, inHeader, syscall.EINVAL)
 			return
 		}
 		initIn = &InitIn{
@@ -843,7 +843,7 @@ func (volume *volumeStruct) doInit(inHeader *InHeader, devFuseFDReadBufPayload [
 	case (volume.fuseMinor >= 32) && (volume.fuseMinor <= 35):
 		if len(devFuseFDReadBufPayload) != InitInUpThru735Size {
 			volume.logger.Printf("Call to doInit() with bad len(devFuseFDReadBufPayload) == %v", len(devFuseFDReadBufPayload))
-			volume.devFuseFDWriter(inHeader, syscall.EINVAL)
+			volume.devFuseFDWriter(devFuseFDClone, inHeader, syscall.EINVAL)
 			return
 		}
 		initIn = &InitIn{
@@ -856,7 +856,7 @@ func (volume *volumeStruct) doInit(inHeader *InHeader, devFuseFDReadBufPayload [
 	case volume.fuseMinor >= 36:
 		if len(devFuseFDReadBufPayload) != InitInFrom736OnSize {
 			volume.logger.Printf("Call to doInit() with bad len(devFuseFDReadBufPayload) == %v", len(devFuseFDReadBufPayload))
-			volume.devFuseFDWriter(inHeader, syscall.EINVAL)
+			volume.devFuseFDWriter(devFuseFDClone, inHeader, syscall.EINVAL)
 			return
 		}
 		initIn = &InitIn{
@@ -868,20 +868,20 @@ func (volume *volumeStruct) doInit(inHeader *InHeader, devFuseFDReadBufPayload [
 		}
 	default:
 		volume.logger.Printf("Call to doInit() with bad InitIn.Minor == %v [must be >= 17 but not 18-20 or 31]", volume.fuseMinor)
-		volume.devFuseFDWriter(inHeader, syscall.EINVAL)
+		volume.devFuseFDWriter(devFuseFDClone, inHeader, syscall.EINVAL)
 		return
 	}
 
 	initOut, errno = volume.callbacks.DoInit(inHeader, initIn)
 	if errno != 0 {
 		volume.logger.Printf("Call to doInit() returning bad errno == %v", errno)
-		volume.devFuseFDWriter(inHeader, errno)
+		volume.devFuseFDWriter(devFuseFDClone, inHeader, errno)
 		return
 	}
 
 	if initOut.Major != 7 {
 		volume.logger.Printf("Call to doInit() with bad InitOut.Major == %v [must be 7]", initOut.Major)
-		volume.devFuseFDWriter(inHeader, syscall.EINVAL)
+		volume.devFuseFDWriter(devFuseFDClone, inHeader, syscall.EINVAL)
 		return
 	}
 
@@ -1034,16 +1034,16 @@ func (volume *volumeStruct) doInit(inHeader *InHeader, devFuseFDReadBufPayload [
 		*(*uint32)(unsafe.Pointer(&outPayload[60])) = 0
 	default:
 		volume.logger.Printf("Call to doInit() with bad InitOut.Minor == %v [must be >= 17 but not 18-20 or 31]", initOut.Minor)
-		volume.devFuseFDWriter(inHeader, syscall.EINVAL)
+		volume.devFuseFDWriter(devFuseFDClone, inHeader, syscall.EINVAL)
 		return
 	}
 
 	volume.fuseMinor = initOut.Minor // just in case volume.callbacks.DoInit() changed it...
 
-	volume.devFuseFDWriter(inHeader, 0, outPayload)
+	volume.devFuseFDWriter(devFuseFDClone, inHeader, 0, outPayload)
 }
 
-func (volume *volumeStruct) doOpenDir(inHeader *InHeader, devFuseFDReadBufPayload []byte) {
+func (volume *volumeStruct) doOpenDir(devFuseFDClone int, inHeader *InHeader, devFuseFDReadBufPayload []byte) {
 	var (
 		errno      syscall.Errno
 		openDirIn  *OpenDirIn
@@ -1053,7 +1053,7 @@ func (volume *volumeStruct) doOpenDir(inHeader *InHeader, devFuseFDReadBufPayloa
 
 	if len(devFuseFDReadBufPayload) != OpenDirInSize {
 		volume.logger.Printf("Call to doOpenDir() with bad len(devFuseFDReadBufPayload) == %v", len(devFuseFDReadBufPayload))
-		volume.devFuseFDWriter(inHeader, syscall.EINVAL)
+		volume.devFuseFDWriter(devFuseFDClone, inHeader, syscall.EINVAL)
 		return
 	}
 
@@ -1064,7 +1064,7 @@ func (volume *volumeStruct) doOpenDir(inHeader *InHeader, devFuseFDReadBufPayloa
 
 	openDirOut, errno = volume.callbacks.DoOpenDir(inHeader, openDirIn)
 	if errno != 0 {
-		volume.devFuseFDWriter(inHeader, errno)
+		volume.devFuseFDWriter(devFuseFDClone, inHeader, errno)
 		return
 	}
 
@@ -1074,10 +1074,10 @@ func (volume *volumeStruct) doOpenDir(inHeader *InHeader, devFuseFDReadBufPayloa
 	*(*uint32)(unsafe.Pointer(&outPayload[8])) = openDirOut.OpenFlags
 	*(*uint32)(unsafe.Pointer(&outPayload[12])) = openDirOut.Padding
 
-	volume.devFuseFDWriter(inHeader, 0, outPayload)
+	volume.devFuseFDWriter(devFuseFDClone, inHeader, 0, outPayload)
 }
 
-func (volume *volumeStruct) doReadDir(inHeader *InHeader, devFuseFDReadBufPayload []byte) {
+func (volume *volumeStruct) doReadDir(devFuseFDClone int, inHeader *InHeader, devFuseFDReadBufPayload []byte) {
 	var (
 		dirEnt            *DirEnt
 		dirEntIndex       int
@@ -1093,7 +1093,7 @@ func (volume *volumeStruct) doReadDir(inHeader *InHeader, devFuseFDReadBufPayloa
 
 	if len(devFuseFDReadBufPayload) != ReadDirInSize {
 		volume.logger.Printf("Call to doReadDir() with bad len(devFuseFDReadBufPayload) == %v", len(devFuseFDReadBufPayload))
-		volume.devFuseFDWriter(inHeader, syscall.EINVAL)
+		volume.devFuseFDWriter(devFuseFDClone, inHeader, syscall.EINVAL)
 		return
 	}
 
@@ -1109,7 +1109,7 @@ func (volume *volumeStruct) doReadDir(inHeader *InHeader, devFuseFDReadBufPayloa
 
 	readDirOut, errno = volume.callbacks.DoReadDir(inHeader, readDirIn)
 	if errno != 0 {
-		volume.devFuseFDWriter(inHeader, errno)
+		volume.devFuseFDWriter(devFuseFDClone, inHeader, errno)
 		return
 	}
 
@@ -1128,7 +1128,7 @@ func (volume *volumeStruct) doReadDir(inHeader *InHeader, devFuseFDReadBufPayloa
 
 			outPayload = outPayload[:outPayloadOffset]
 
-			volume.devFuseFDWriter(inHeader, 0, outPayload)
+			volume.devFuseFDWriter(devFuseFDClone, inHeader, 0, outPayload)
 
 			return
 		}
@@ -1152,10 +1152,10 @@ func (volume *volumeStruct) doReadDir(inHeader *InHeader, devFuseFDReadBufPayloa
 
 	outPayload = outPayload[:outPayloadOffset]
 
-	volume.devFuseFDWriter(inHeader, 0, outPayload)
+	volume.devFuseFDWriter(devFuseFDClone, inHeader, 0, outPayload)
 }
 
-func (volume *volumeStruct) doReleaseDir(inHeader *InHeader, devFuseFDReadBufPayload []byte) {
+func (volume *volumeStruct) doReleaseDir(devFuseFDClone int, inHeader *InHeader, devFuseFDReadBufPayload []byte) {
 	var (
 		errno        syscall.Errno
 		releaseDirIn *ReleaseDirIn
@@ -1163,7 +1163,7 @@ func (volume *volumeStruct) doReleaseDir(inHeader *InHeader, devFuseFDReadBufPay
 
 	if len(devFuseFDReadBufPayload) != ReleaseDirInSize {
 		volume.logger.Printf("Call to doReleaseDir() with bad len(devFuseFDReadBufPayload) == %v", len(devFuseFDReadBufPayload))
-		volume.devFuseFDWriter(inHeader, syscall.EINVAL)
+		volume.devFuseFDWriter(devFuseFDClone, inHeader, syscall.EINVAL)
 		return
 	}
 
@@ -1176,10 +1176,10 @@ func (volume *volumeStruct) doReleaseDir(inHeader *InHeader, devFuseFDReadBufPay
 
 	errno = volume.callbacks.DoReleaseDir(inHeader, releaseDirIn)
 
-	volume.devFuseFDWriter(inHeader, errno)
+	volume.devFuseFDWriter(devFuseFDClone, inHeader, errno)
 }
 
-func (volume *volumeStruct) doFSyncDir(inHeader *InHeader, devFuseFDReadBufPayload []byte) {
+func (volume *volumeStruct) doFSyncDir(devFuseFDClone int, inHeader *InHeader, devFuseFDReadBufPayload []byte) {
 	var (
 		errno      syscall.Errno
 		fSyncDirIn *FSyncDirIn
@@ -1187,7 +1187,7 @@ func (volume *volumeStruct) doFSyncDir(inHeader *InHeader, devFuseFDReadBufPaylo
 
 	if len(devFuseFDReadBufPayload) != FSyncDirInSize {
 		volume.logger.Printf("Call to doFSyncDir() with bad len(devFuseFDReadBufPayload) == %v", len(devFuseFDReadBufPayload))
-		volume.devFuseFDWriter(inHeader, syscall.EINVAL)
+		volume.devFuseFDWriter(devFuseFDClone, inHeader, syscall.EINVAL)
 		return
 	}
 
@@ -1199,10 +1199,10 @@ func (volume *volumeStruct) doFSyncDir(inHeader *InHeader, devFuseFDReadBufPaylo
 
 	errno = volume.callbacks.DoFSyncDir(inHeader, fSyncDirIn)
 
-	volume.devFuseFDWriter(inHeader, errno)
+	volume.devFuseFDWriter(devFuseFDClone, inHeader, errno)
 }
 
-func (volume *volumeStruct) doGetLK(inHeader *InHeader, devFuseFDReadBufPayload []byte) {
+func (volume *volumeStruct) doGetLK(devFuseFDClone int, inHeader *InHeader, devFuseFDReadBufPayload []byte) {
 	var (
 		errno      syscall.Errno
 		getLKIn    *GetLKIn
@@ -1212,7 +1212,7 @@ func (volume *volumeStruct) doGetLK(inHeader *InHeader, devFuseFDReadBufPayload 
 
 	if len(devFuseFDReadBufPayload) != GetLKInSize {
 		volume.logger.Printf("Call to doGetLK() with bad len(devFuseFDReadBufPayload) == %v", len(devFuseFDReadBufPayload))
-		volume.devFuseFDWriter(inHeader, syscall.EINVAL)
+		volume.devFuseFDWriter(devFuseFDClone, inHeader, syscall.EINVAL)
 		return
 	}
 
@@ -1231,7 +1231,7 @@ func (volume *volumeStruct) doGetLK(inHeader *InHeader, devFuseFDReadBufPayload 
 
 	getLKOut, errno = volume.callbacks.DoGetLK(inHeader, getLKIn)
 	if errno != 0 {
-		volume.devFuseFDWriter(inHeader, errno)
+		volume.devFuseFDWriter(devFuseFDClone, inHeader, errno)
 		return
 	}
 
@@ -1242,10 +1242,10 @@ func (volume *volumeStruct) doGetLK(inHeader *InHeader, devFuseFDReadBufPayload 
 	*(*uint32)(unsafe.Pointer(&outPayload[16])) = getLKOut.FileLock.Type
 	*(*uint32)(unsafe.Pointer(&outPayload[20])) = getLKOut.FileLock.PID
 
-	volume.devFuseFDWriter(inHeader, 0, outPayload)
+	volume.devFuseFDWriter(devFuseFDClone, inHeader, 0, outPayload)
 }
 
-func (volume *volumeStruct) doSetLK(inHeader *InHeader, devFuseFDReadBufPayload []byte) {
+func (volume *volumeStruct) doSetLK(devFuseFDClone int, inHeader *InHeader, devFuseFDReadBufPayload []byte) {
 	var (
 		errno   syscall.Errno
 		setLKIn *SetLKIn
@@ -1253,7 +1253,7 @@ func (volume *volumeStruct) doSetLK(inHeader *InHeader, devFuseFDReadBufPayload 
 
 	if len(devFuseFDReadBufPayload) != SetLKInSize {
 		volume.logger.Printf("Call to doSetLK() with bad len(devFuseFDReadBufPayload) == %v", len(devFuseFDReadBufPayload))
-		volume.devFuseFDWriter(inHeader, syscall.EINVAL)
+		volume.devFuseFDWriter(devFuseFDClone, inHeader, syscall.EINVAL)
 		return
 	}
 
@@ -1272,10 +1272,10 @@ func (volume *volumeStruct) doSetLK(inHeader *InHeader, devFuseFDReadBufPayload 
 
 	errno = volume.callbacks.DoSetLK(inHeader, setLKIn)
 
-	volume.devFuseFDWriter(inHeader, errno)
+	volume.devFuseFDWriter(devFuseFDClone, inHeader, errno)
 }
 
-func (volume *volumeStruct) doSetLKW(inHeader *InHeader, devFuseFDReadBufPayload []byte) {
+func (volume *volumeStruct) doSetLKW(devFuseFDClone int, inHeader *InHeader, devFuseFDReadBufPayload []byte) {
 	var (
 		errno    syscall.Errno
 		setLKWIn *SetLKWIn
@@ -1283,7 +1283,7 @@ func (volume *volumeStruct) doSetLKW(inHeader *InHeader, devFuseFDReadBufPayload
 
 	if len(devFuseFDReadBufPayload) != SetLKWInSize {
 		volume.logger.Printf("Call to doSetLKW() with bad len(devFuseFDReadBufPayload) == %v", len(devFuseFDReadBufPayload))
-		volume.devFuseFDWriter(inHeader, syscall.EINVAL)
+		volume.devFuseFDWriter(devFuseFDClone, inHeader, syscall.EINVAL)
 		return
 	}
 
@@ -1302,10 +1302,10 @@ func (volume *volumeStruct) doSetLKW(inHeader *InHeader, devFuseFDReadBufPayload
 
 	errno = volume.callbacks.DoSetLKW(inHeader, setLKWIn)
 
-	volume.devFuseFDWriter(inHeader, errno)
+	volume.devFuseFDWriter(devFuseFDClone, inHeader, errno)
 }
 
-func (volume *volumeStruct) doAccess(inHeader *InHeader, devFuseFDReadBufPayload []byte) {
+func (volume *volumeStruct) doAccess(devFuseFDClone int, inHeader *InHeader, devFuseFDReadBufPayload []byte) {
 	var (
 		errno    syscall.Errno
 		accessIn *AccessIn
@@ -1313,7 +1313,7 @@ func (volume *volumeStruct) doAccess(inHeader *InHeader, devFuseFDReadBufPayload
 
 	if len(devFuseFDReadBufPayload) != AccessInSize {
 		volume.logger.Printf("Call to doAccess() with bad len(devFuseFDReadBufPayload) == %v", len(devFuseFDReadBufPayload))
-		volume.devFuseFDWriter(inHeader, syscall.EINVAL)
+		volume.devFuseFDWriter(devFuseFDClone, inHeader, syscall.EINVAL)
 		return
 	}
 
@@ -1324,10 +1324,10 @@ func (volume *volumeStruct) doAccess(inHeader *InHeader, devFuseFDReadBufPayload
 
 	errno = volume.callbacks.DoAccess(inHeader, accessIn)
 
-	volume.devFuseFDWriter(inHeader, errno)
+	volume.devFuseFDWriter(devFuseFDClone, inHeader, errno)
 }
 
-func (volume *volumeStruct) doCreate(inHeader *InHeader, devFuseFDReadBufPayload []byte) {
+func (volume *volumeStruct) doCreate(devFuseFDClone int, inHeader *InHeader, devFuseFDReadBufPayload []byte) {
 	var (
 		errno      syscall.Errno
 		createIn   *CreateIn
@@ -1337,7 +1337,7 @@ func (volume *volumeStruct) doCreate(inHeader *InHeader, devFuseFDReadBufPayload
 
 	if len(devFuseFDReadBufPayload) < CreateInFixedPortionSize {
 		volume.logger.Printf("Call to doCreate() with bad len(devFuseFDReadBufPayload) == %v", len(devFuseFDReadBufPayload))
-		volume.devFuseFDWriter(inHeader, syscall.EINVAL)
+		volume.devFuseFDWriter(devFuseFDClone, inHeader, syscall.EINVAL)
 		return
 	}
 
@@ -1351,7 +1351,7 @@ func (volume *volumeStruct) doCreate(inHeader *InHeader, devFuseFDReadBufPayload
 
 	createOut, errno = volume.callbacks.DoCreate(inHeader, createIn)
 	if errno != 0 {
-		volume.devFuseFDWriter(inHeader, errno)
+		volume.devFuseFDWriter(devFuseFDClone, inHeader, errno)
 		return
 	}
 
@@ -1370,17 +1370,17 @@ func (volume *volumeStruct) doCreate(inHeader *InHeader, devFuseFDReadBufPayload
 	*(*uint32)(unsafe.Pointer(&outPayload[EntryOutSize+8])) = createOut.OpenFlags
 	*(*uint32)(unsafe.Pointer(&outPayload[EntryOutSize+12])) = createOut.Padding
 
-	volume.devFuseFDWriter(inHeader, 0, outPayload)
+	volume.devFuseFDWriter(devFuseFDClone, inHeader, 0, outPayload)
 }
 
-func (volume *volumeStruct) doInterrupt(inHeader *InHeader, devFuseFDReadBufPayload []byte) {
+func (volume *volumeStruct) doInterrupt(devFuseFDClone int, inHeader *InHeader, devFuseFDReadBufPayload []byte) {
 	var (
 		interruptIn *InterruptIn
 	)
 
 	if len(devFuseFDReadBufPayload) != InterruptInSize {
 		volume.logger.Printf("Call to doInterrupt() with bad len(devFuseFDReadBufPayload) == %v", len(devFuseFDReadBufPayload))
-		volume.devFuseFDWriter(inHeader, syscall.EINVAL)
+		volume.devFuseFDWriter(devFuseFDClone, inHeader, syscall.EINVAL)
 		return
 	}
 
@@ -1391,7 +1391,7 @@ func (volume *volumeStruct) doInterrupt(inHeader *InHeader, devFuseFDReadBufPayl
 	volume.callbacks.DoInterrupt(inHeader, interruptIn)
 }
 
-func (volume *volumeStruct) doBMap(inHeader *InHeader, devFuseFDReadBufPayload []byte) {
+func (volume *volumeStruct) doBMap(devFuseFDClone int, inHeader *InHeader, devFuseFDReadBufPayload []byte) {
 	var (
 		errno      syscall.Errno
 		bMapIn     *BMapIn
@@ -1401,7 +1401,7 @@ func (volume *volumeStruct) doBMap(inHeader *InHeader, devFuseFDReadBufPayload [
 
 	if len(devFuseFDReadBufPayload) != BMapInSize {
 		volume.logger.Printf("Call to doBMap() with bad len(devFuseFDReadBufPayload) == %v", len(devFuseFDReadBufPayload))
-		volume.devFuseFDWriter(inHeader, syscall.EINVAL)
+		volume.devFuseFDWriter(devFuseFDClone, inHeader, syscall.EINVAL)
 		return
 	}
 
@@ -1413,7 +1413,7 @@ func (volume *volumeStruct) doBMap(inHeader *InHeader, devFuseFDReadBufPayload [
 
 	bMapOut, errno = volume.callbacks.DoBMap(inHeader, bMapIn)
 	if errno != 0 {
-		volume.devFuseFDWriter(inHeader, errno)
+		volume.devFuseFDWriter(devFuseFDClone, inHeader, errno)
 		return
 	}
 
@@ -1421,26 +1421,26 @@ func (volume *volumeStruct) doBMap(inHeader *InHeader, devFuseFDReadBufPayload [
 
 	*(*uint64)(unsafe.Pointer(&outPayload[0])) = bMapOut.Block
 
-	volume.devFuseFDWriter(inHeader, 0, outPayload)
+	volume.devFuseFDWriter(devFuseFDClone, inHeader, 0, outPayload)
 }
 
-func (volume *volumeStruct) doDestroy(inHeader *InHeader, devFuseFDReadBufPayload []byte) {
+func (volume *volumeStruct) doDestroy(devFuseFDClone int, inHeader *InHeader, devFuseFDReadBufPayload []byte) {
 	var (
 		errno syscall.Errno
 	)
 
 	if len(devFuseFDReadBufPayload) != 0 {
 		volume.logger.Printf("Call to doDestroy() with bad len(devFuseFDReadBufPayload) == %v", len(devFuseFDReadBufPayload))
-		volume.devFuseFDWriter(inHeader, syscall.EINVAL)
+		volume.devFuseFDWriter(devFuseFDClone, inHeader, syscall.EINVAL)
 		return
 	}
 
 	errno = volume.callbacks.DoDestroy(inHeader)
 
-	volume.devFuseFDWriter(inHeader, errno)
+	volume.devFuseFDWriter(devFuseFDClone, inHeader, errno)
 }
 
-func (volume *volumeStruct) doPoll(inHeader *InHeader, devFuseFDReadBufPayload []byte) {
+func (volume *volumeStruct) doPoll(devFuseFDClone int, inHeader *InHeader, devFuseFDReadBufPayload []byte) {
 	var (
 		errno      syscall.Errno
 		outPayload []byte
@@ -1450,7 +1450,7 @@ func (volume *volumeStruct) doPoll(inHeader *InHeader, devFuseFDReadBufPayload [
 
 	if len(devFuseFDReadBufPayload) != PollInSize {
 		volume.logger.Printf("Call to doPoll() with bad len(devFuseFDReadBufPayload) == %v", len(devFuseFDReadBufPayload))
-		volume.devFuseFDWriter(inHeader, syscall.EINVAL)
+		volume.devFuseFDWriter(devFuseFDClone, inHeader, syscall.EINVAL)
 		return
 	}
 
@@ -1463,7 +1463,7 @@ func (volume *volumeStruct) doPoll(inHeader *InHeader, devFuseFDReadBufPayload [
 
 	pollOut, errno = volume.callbacks.DoPoll(inHeader, pollIn)
 	if errno != 0 {
-		volume.devFuseFDWriter(inHeader, errno)
+		volume.devFuseFDWriter(devFuseFDClone, inHeader, errno)
 		return
 	}
 
@@ -1472,10 +1472,10 @@ func (volume *volumeStruct) doPoll(inHeader *InHeader, devFuseFDReadBufPayload [
 	*(*uint32)(unsafe.Pointer(&outPayload[0])) = pollOut.REvents
 	*(*uint32)(unsafe.Pointer(&outPayload[4])) = pollOut.Padding
 
-	volume.devFuseFDWriter(inHeader, 0, outPayload)
+	volume.devFuseFDWriter(devFuseFDClone, inHeader, 0, outPayload)
 }
 
-func (volume *volumeStruct) doBatchForget(inHeader *InHeader, devFuseFDReadBufPayload []byte) {
+func (volume *volumeStruct) doBatchForget(devFuseFDClone int, inHeader *InHeader, devFuseFDReadBufPayload []byte) {
 	var (
 		batchForgetIn            *BatchForgetIn
 		batchForgetInForgetIndex uint32
@@ -1485,7 +1485,7 @@ func (volume *volumeStruct) doBatchForget(inHeader *InHeader, devFuseFDReadBufPa
 
 	if len(devFuseFDReadBufPayload) < BatchForgetInFixedPortionSize {
 		volume.logger.Printf("Call to doBatchForget() with bad len(devFuseFDReadBufPayload) == %v", len(devFuseFDReadBufPayload))
-		volume.devFuseFDWriter(inHeader, syscall.EINVAL)
+		volume.devFuseFDWriter(devFuseFDClone, inHeader, syscall.EINVAL)
 		return
 	}
 
@@ -1498,7 +1498,7 @@ func (volume *volumeStruct) doBatchForget(inHeader *InHeader, devFuseFDReadBufPa
 
 	if len(devFuseFDReadBufPayload) != batchForgetInSize {
 		volume.logger.Printf("Call to doBatchForget() with bad len(devFuseFDReadBufPayload) == %v expected %v", len(devFuseFDReadBufPayload), batchForgetInSize)
-		volume.devFuseFDWriter(inHeader, syscall.EINVAL)
+		volume.devFuseFDWriter(devFuseFDClone, inHeader, syscall.EINVAL)
 		return
 	}
 
@@ -1516,7 +1516,7 @@ func (volume *volumeStruct) doBatchForget(inHeader *InHeader, devFuseFDReadBufPa
 	volume.callbacks.DoBatchForget(inHeader, batchForgetIn)
 }
 
-func (volume *volumeStruct) doFAllocate(inHeader *InHeader, devFuseFDReadBufPayload []byte) {
+func (volume *volumeStruct) doFAllocate(devFuseFDClone int, inHeader *InHeader, devFuseFDReadBufPayload []byte) {
 	var (
 		errno       syscall.Errno
 		fAllocateIn *FAllocateIn
@@ -1524,7 +1524,7 @@ func (volume *volumeStruct) doFAllocate(inHeader *InHeader, devFuseFDReadBufPayl
 
 	if len(devFuseFDReadBufPayload) != FAllocateInSize {
 		volume.logger.Printf("Call to doFAllocate() with bad len(devFuseFDReadBufPayload) == %v", len(devFuseFDReadBufPayload))
-		volume.devFuseFDWriter(inHeader, syscall.EINVAL)
+		volume.devFuseFDWriter(devFuseFDClone, inHeader, syscall.EINVAL)
 		return
 	}
 
@@ -1538,10 +1538,10 @@ func (volume *volumeStruct) doFAllocate(inHeader *InHeader, devFuseFDReadBufPayl
 
 	errno = volume.callbacks.DoFAllocate(inHeader, fAllocateIn)
 
-	volume.devFuseFDWriter(inHeader, errno)
+	volume.devFuseFDWriter(devFuseFDClone, inHeader, errno)
 }
 
-func (volume *volumeStruct) doReadDirPlus(inHeader *InHeader, devFuseFDReadBufPayload []byte) {
+func (volume *volumeStruct) doReadDirPlus(devFuseFDClone int, inHeader *InHeader, devFuseFDReadBufPayload []byte) {
 	var (
 		dirEntPlus            *DirEntPlus
 		dirEntPlusIndex       int
@@ -1557,7 +1557,7 @@ func (volume *volumeStruct) doReadDirPlus(inHeader *InHeader, devFuseFDReadBufPa
 
 	if len(devFuseFDReadBufPayload) != ReadDirPlusInSize {
 		volume.logger.Printf("Call to doReadDirPlus() with bad len(devFuseFDReadBufPayload) == %v", len(devFuseFDReadBufPayload))
-		volume.devFuseFDWriter(inHeader, syscall.EINVAL)
+		volume.devFuseFDWriter(devFuseFDClone, inHeader, syscall.EINVAL)
 		return
 	}
 
@@ -1573,7 +1573,7 @@ func (volume *volumeStruct) doReadDirPlus(inHeader *InHeader, devFuseFDReadBufPa
 
 	readDirPlusOut, errno = volume.callbacks.DoReadDirPlus(inHeader, readDirPlusIn)
 	if errno != 0 {
-		volume.devFuseFDWriter(inHeader, errno)
+		volume.devFuseFDWriter(devFuseFDClone, inHeader, errno)
 		return
 	}
 
@@ -1592,7 +1592,7 @@ func (volume *volumeStruct) doReadDirPlus(inHeader *InHeader, devFuseFDReadBufPa
 
 			outPayload = outPayload[:outPayloadOffset]
 
-			volume.devFuseFDWriter(inHeader, 0, outPayload)
+			volume.devFuseFDWriter(devFuseFDClone, inHeader, 0, outPayload)
 
 			return
 		}
@@ -1627,10 +1627,10 @@ func (volume *volumeStruct) doReadDirPlus(inHeader *InHeader, devFuseFDReadBufPa
 
 	outPayload = outPayload[:outPayloadOffset]
 
-	volume.devFuseFDWriter(inHeader, 0, outPayload)
+	volume.devFuseFDWriter(devFuseFDClone, inHeader, 0, outPayload)
 }
 
-func (volume *volumeStruct) doRename2(inHeader *InHeader, devFuseFDReadBufPayload []byte) {
+func (volume *volumeStruct) doRename2(devFuseFDClone int, inHeader *InHeader, devFuseFDReadBufPayload []byte) {
 	var (
 		errno               syscall.Errno
 		oldNameNewNameSplit [][]byte
@@ -1639,14 +1639,14 @@ func (volume *volumeStruct) doRename2(inHeader *InHeader, devFuseFDReadBufPayloa
 
 	if len(devFuseFDReadBufPayload) < Rename2InFixedPortionSize {
 		volume.logger.Printf("Call to doRename2() with bad len(devFuseFDReadBufPayload) == %v", len(devFuseFDReadBufPayload))
-		volume.devFuseFDWriter(inHeader, syscall.EINVAL)
+		volume.devFuseFDWriter(devFuseFDClone, inHeader, syscall.EINVAL)
 		return
 	}
 
 	oldNameNewNameSplit = bytes.SplitN(devFuseFDReadBufPayload[Rename2InFixedPortionSize:], []byte{0}, 2)
 	if len(oldNameNewNameSplit) != 2 {
 		volume.logger.Printf("Call to doRename2() with bad devFuseFDReadBufPayload")
-		volume.devFuseFDWriter(inHeader, syscall.EINVAL)
+		volume.devFuseFDWriter(devFuseFDClone, inHeader, syscall.EINVAL)
 		return
 	}
 
@@ -1660,10 +1660,10 @@ func (volume *volumeStruct) doRename2(inHeader *InHeader, devFuseFDReadBufPayloa
 
 	errno = volume.callbacks.DoRename2(inHeader, rename2In)
 
-	volume.devFuseFDWriter(inHeader, errno)
+	volume.devFuseFDWriter(devFuseFDClone, inHeader, errno)
 }
 
-func (volume *volumeStruct) doLSeek(inHeader *InHeader, devFuseFDReadBufPayload []byte) {
+func (volume *volumeStruct) doLSeek(devFuseFDClone int, inHeader *InHeader, devFuseFDReadBufPayload []byte) {
 	var (
 		errno      syscall.Errno
 		lSeekIn    *LSeekIn
@@ -1673,7 +1673,7 @@ func (volume *volumeStruct) doLSeek(inHeader *InHeader, devFuseFDReadBufPayload 
 
 	if len(devFuseFDReadBufPayload) != LSeekInSize {
 		volume.logger.Printf("Call to doLSeek() with bad len(devFuseFDReadBufPayload) == %v", len(devFuseFDReadBufPayload))
-		volume.devFuseFDWriter(inHeader, syscall.EINVAL)
+		volume.devFuseFDWriter(devFuseFDClone, inHeader, syscall.EINVAL)
 		return
 	}
 
@@ -1686,7 +1686,7 @@ func (volume *volumeStruct) doLSeek(inHeader *InHeader, devFuseFDReadBufPayload 
 
 	lSeekOut, errno = volume.callbacks.DoLSeek(inHeader, lSeekIn)
 	if errno != 0 {
-		volume.devFuseFDWriter(inHeader, errno)
+		volume.devFuseFDWriter(devFuseFDClone, inHeader, errno)
 		return
 	}
 
@@ -1694,10 +1694,10 @@ func (volume *volumeStruct) doLSeek(inHeader *InHeader, devFuseFDReadBufPayload 
 
 	*(*uint64)(unsafe.Pointer(&outPayload[0])) = lSeekOut.Offset
 
-	volume.devFuseFDWriter(inHeader, 0, outPayload)
+	volume.devFuseFDWriter(devFuseFDClone, inHeader, 0, outPayload)
 }
 
-func (volume *volumeStruct) doStatX(inHeader *InHeader, devFuseFDReadBufPayload []byte) {
+func (volume *volumeStruct) doStatX(devFuseFDClone int, inHeader *InHeader, devFuseFDReadBufPayload []byte) {
 	var (
 		errno      syscall.Errno
 		outPayload []byte
@@ -1707,7 +1707,7 @@ func (volume *volumeStruct) doStatX(inHeader *InHeader, devFuseFDReadBufPayload 
 
 	if len(devFuseFDReadBufPayload) != StatXInSize {
 		volume.logger.Printf("Call to doStatX() with bad len(devFuseFDReadBufPayload) == %v", len(devFuseFDReadBufPayload))
-		volume.devFuseFDWriter(inHeader, syscall.EINVAL)
+		volume.devFuseFDWriter(devFuseFDClone, inHeader, syscall.EINVAL)
 		return
 	}
 
@@ -1721,7 +1721,7 @@ func (volume *volumeStruct) doStatX(inHeader *InHeader, devFuseFDReadBufPayload 
 
 	statXOut, errno = volume.callbacks.DoStatX(inHeader, statXIn)
 	if errno != 0 {
-		volume.devFuseFDWriter(inHeader, errno)
+		volume.devFuseFDWriter(devFuseFDClone, inHeader, errno)
 		return
 	}
 
@@ -1776,5 +1776,5 @@ func (volume *volumeStruct) doStatX(inHeader *InHeader, devFuseFDReadBufPayload 
 	*(*uint64)(unsafe.Pointer(&outPayload[272])) = statXOut.Spare2[12]
 	*(*uint64)(unsafe.Pointer(&outPayload[280])) = statXOut.Spare2[13]
 
-	volume.devFuseFDWriter(inHeader, 0, outPayload)
+	volume.devFuseFDWriter(devFuseFDClone, inHeader, 0, outPayload)
 }

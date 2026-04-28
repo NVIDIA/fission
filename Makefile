@@ -3,9 +3,9 @@
 
 EXAMPLE_DIRS = examples/fission-*
 
-all: fmt build
+all: fmt lint build
 
-all-tree: fmt-tree build-tree
+all-tree: fmt-tree lint-tree build-tree
 
 .PHONY: all build build-tree clean clean-tree fmt fmt-tree lint-update lint lint-tree
 

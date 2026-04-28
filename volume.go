@@ -5,16 +5,20 @@ package fission
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"io"
 	"log"
 	"os"
 	"os/exec"
 	"runtime"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
 	"unsafe"
+
+	"golang.org/x/sys/unix"
 )
 
 type volumeStruct struct {
@@ -320,13 +324,13 @@ func (volume *volumeStruct) DoUnmount() (err error) {
 		return
 	}
 
+	volume.devFuseFDReaderWG.Wait()
+
 	err = syscall.Close(volume.devFuseFD)
 	if err != nil {
-		volume.logger.Printf("DoUnmount() unable to close /dev/fuse: %v", err)
+		volume.logger.Printf("DoUnmount() unable to close %s: %v", devLinuxFusePath, err)
 		return
 	}
-
-	volume.devFuseFDReaderWG.Wait()
 
 	volume.logger.Printf("Volume %s unmounted from mountpoint %s", volume.volumeName, volume.mountpointDirPath)
 
@@ -383,53 +387,88 @@ func (volume *volumeStruct) awaitScanPipe(wg *sync.WaitGroup, lineCount *uint32,
 
 func (volume *volumeStruct) devFuseFDReader() {
 	var (
-		bytesRead        int
-		devFuseFDReadBuf = make([]byte, volume.devFuseFDReadSize)
-		err              error
-		wasSubstituted   bool
+		bytesRead             int
+		devFuseFDClone        int
+		devFuseFDCloneWrapped *os.File
+		devFuseFDReadBuf      = make([]byte, volume.devFuseFDReadSize)
+		err                   error
+		wasSubstituted        bool
 	)
+
+	devFuseFDClone, err = unix.Open(devLinuxFusePath, unix.O_RDWR, 0)
+	if err != nil {
+		volume.errChanOnce.Do(func() {
+			volume.logger.Printf("Exiting due to %s Open err: %v", devLinuxFusePath, err)
+			volume.errChan <- err
+		})
+
+		volume.devFuseFDReaderWG.Done()
+
+		return
+	}
+
+	err = unix.IoctlSetPointerInt(devFuseFDClone, FuseDevIocClone, volume.devFuseFD)
+	if err != nil {
+		volume.errChanOnce.Do(func() {
+			volume.logger.Printf("Exiting due to %s IoctlSetInt err: %v", devLinuxFusePath, err)
+			volume.errChan <- err
+		})
+
+		_ = syscall.Close(devFuseFDClone)
+
+		volume.devFuseFDReaderWG.Done()
+
+		return
+	}
+
+	err = unix.SetNonblock(devFuseFDClone, true)
+	if err != nil {
+		volume.errChanOnce.Do(func() {
+			volume.logger.Printf("Exiting due to %s SetNonblock err: %v", devLinuxFusePath, err)
+			volume.errChan <- err
+		})
+
+		_ = syscall.Close(devFuseFDClone)
+
+		volume.devFuseFDReaderWG.Done()
+
+		return
+	}
+
+	devFuseFDCloneWrapped = os.NewFile(uintptr(devFuseFDClone), "devFuseFDReader")
 
 	for {
 		devFuseFDReadBuf = devFuseFDReadBuf[:volume.devFuseFDReadSize] // len == cap
 
-		bytesRead, err = syscall.Read(volume.devFuseFD, devFuseFDReadBuf)
+		bytesRead, err = devFuseFDCloneWrapped.Read(devFuseFDReadBuf)
 		if err != nil {
-			switch err.Error() {
-			case "interrupted system call":
-				continue
-			case "operation not permitted":
-				continue
-			default:
-				// Time to exit...
-
-				volume.devFuseFDReaderWG.Done()
-
-				// Signal errChan that we are exiting (passing <nil> if due to close of volume.devFuseFD)
-				// Note: Since all devFuseFDReader() instances will do this, we only need one of them
+			if !errors.Is(err, io.EOF) && !errors.Is(err, syscall.EBADF) && !errors.Is(err, syscall.ENODEV) && !errors.Is(err, syscall.ENOTCONN) && !strings.Contains(err.Error(), "use of closed file") {
+				// Report unexpected error
 
 				volume.errChanOnce.Do(func() {
-					switch err.Error() {
-					case "no such device":
-						volume.errChan <- nil
-					case "operation not supported by device":
-						volume.errChan <- nil
-					default:
-						volume.logger.Printf("Exiting due to /dev/fuse Read err: %v", err)
-						volume.errChan <- err
-					}
+					volume.logger.Printf("Exiting due to %s Read() returning unexpected err: %v", devLinuxFusePath, err)
+					volume.errChan <- err
 				})
-
-				return
 			}
+
+			// In any ev event, it is time to exit
+
+			_ = syscall.Close(devFuseFDClone)
+
+			volume.devFuseFDReaderWG.Done()
+
+			return
 		}
 
 		// Process devFuseFDReadBuf
 
 		devFuseFDReadBuf = devFuseFDReadBuf[:bytesRead]
 
-		wasSubstituted = volume.processDevFuseFDReadBuf(devFuseFDReadBuf)
+		wasSubstituted = volume.processDevFuseFDReadBuf(devFuseFDClone, devFuseFDReadBuf)
 		if wasSubstituted {
 			// Time to exit...
+
+			_ = syscall.Close(devFuseFDClone)
 
 			volume.devFuseFDReaderWG.Done()
 
@@ -438,14 +477,14 @@ func (volume *volumeStruct) devFuseFDReader() {
 	}
 }
 
-func (volume *volumeStruct) processDevFuseFDReadBuf(devFuseFDReadBuf []byte) (wasSubstituted bool) {
+func (volume *volumeStruct) processDevFuseFDReadBuf(devFuseFDClone int, devFuseFDReadBuf []byte) (wasSubstituted bool) {
 	var (
 		inHeader *InHeader
 	)
 
 	if len(devFuseFDReadBuf) < InHeaderSize {
 		// All we can do is just drop it
-		volume.logger.Printf("Read malformed message from /dev/fuse")
+		volume.logger.Printf("Read malformed message from %s", devLinuxFusePath)
 		wasSubstituted = false
 		return
 	}
@@ -463,95 +502,95 @@ func (volume *volumeStruct) processDevFuseFDReadBuf(devFuseFDReadBuf []byte) (wa
 
 	switch inHeader.OpCode {
 	case OpCodeLookup:
-		volume.doLookup(inHeader, devFuseFDReadBuf[InHeaderSize:])
+		volume.doLookup(devFuseFDClone, inHeader, devFuseFDReadBuf[InHeaderSize:])
 	case OpCodeForget:
-		volume.doForget(inHeader, devFuseFDReadBuf[InHeaderSize:])
+		volume.doForget(devFuseFDClone, inHeader, devFuseFDReadBuf[InHeaderSize:])
 	case OpCodeGetAttr:
-		volume.doGetAttr(inHeader, devFuseFDReadBuf[InHeaderSize:])
+		volume.doGetAttr(devFuseFDClone, inHeader, devFuseFDReadBuf[InHeaderSize:])
 	case OpCodeSetAttr:
-		volume.doSetAttr(inHeader, devFuseFDReadBuf[InHeaderSize:])
+		volume.doSetAttr(devFuseFDClone, inHeader, devFuseFDReadBuf[InHeaderSize:])
 	case OpCodeReadLink:
-		volume.doReadLink(inHeader, devFuseFDReadBuf[InHeaderSize:])
+		volume.doReadLink(devFuseFDClone, inHeader, devFuseFDReadBuf[InHeaderSize:])
 	case OpCodeSymLink:
-		volume.doSymLink(inHeader, devFuseFDReadBuf[InHeaderSize:])
+		volume.doSymLink(devFuseFDClone, inHeader, devFuseFDReadBuf[InHeaderSize:])
 	case OpCodeMkNod:
-		volume.doMkNod(inHeader, devFuseFDReadBuf[InHeaderSize:])
+		volume.doMkNod(devFuseFDClone, inHeader, devFuseFDReadBuf[InHeaderSize:])
 	case OpCodeMkDir:
-		volume.doMkDir(inHeader, devFuseFDReadBuf[InHeaderSize:])
+		volume.doMkDir(devFuseFDClone, inHeader, devFuseFDReadBuf[InHeaderSize:])
 	case OpCodeUnlink:
-		volume.doUnlink(inHeader, devFuseFDReadBuf[InHeaderSize:])
+		volume.doUnlink(devFuseFDClone, inHeader, devFuseFDReadBuf[InHeaderSize:])
 	case OpCodeRmDir:
-		volume.doRmDir(inHeader, devFuseFDReadBuf[InHeaderSize:])
+		volume.doRmDir(devFuseFDClone, inHeader, devFuseFDReadBuf[InHeaderSize:])
 	case OpCodeRename:
-		volume.doRename(inHeader, devFuseFDReadBuf[InHeaderSize:])
+		volume.doRename(devFuseFDClone, inHeader, devFuseFDReadBuf[InHeaderSize:])
 	case OpCodeLink:
-		volume.doLink(inHeader, devFuseFDReadBuf[InHeaderSize:])
+		volume.doLink(devFuseFDClone, inHeader, devFuseFDReadBuf[InHeaderSize:])
 	case OpCodeOpen:
-		volume.doOpen(inHeader, devFuseFDReadBuf[InHeaderSize:])
+		volume.doOpen(devFuseFDClone, inHeader, devFuseFDReadBuf[InHeaderSize:])
 	case OpCodeRead:
-		volume.doRead(inHeader, devFuseFDReadBuf[InHeaderSize:])
+		volume.doRead(devFuseFDClone, inHeader, devFuseFDReadBuf[InHeaderSize:])
 	case OpCodeWrite:
-		volume.doWrite(inHeader, devFuseFDReadBuf[InHeaderSize:])
+		volume.doWrite(devFuseFDClone, inHeader, devFuseFDReadBuf[InHeaderSize:])
 	case OpCodeStatFS:
-		volume.doStatFS(inHeader, devFuseFDReadBuf[InHeaderSize:])
+		volume.doStatFS(devFuseFDClone, inHeader, devFuseFDReadBuf[InHeaderSize:])
 	case OpCodeRelease:
-		volume.doRelease(inHeader, devFuseFDReadBuf[InHeaderSize:])
+		volume.doRelease(devFuseFDClone, inHeader, devFuseFDReadBuf[InHeaderSize:])
 	case OpCodeFSync:
-		volume.doFSync(inHeader, devFuseFDReadBuf[InHeaderSize:])
+		volume.doFSync(devFuseFDClone, inHeader, devFuseFDReadBuf[InHeaderSize:])
 	case OpCodeSetXAttr:
-		volume.doSetXAttr(inHeader, devFuseFDReadBuf[InHeaderSize:])
+		volume.doSetXAttr(devFuseFDClone, inHeader, devFuseFDReadBuf[InHeaderSize:])
 	case OpCodeGetXAttr:
-		volume.doGetXAttr(inHeader, devFuseFDReadBuf[InHeaderSize:])
+		volume.doGetXAttr(devFuseFDClone, inHeader, devFuseFDReadBuf[InHeaderSize:])
 	case OpCodeListXAttr:
-		volume.doListXAttr(inHeader, devFuseFDReadBuf[InHeaderSize:])
+		volume.doListXAttr(devFuseFDClone, inHeader, devFuseFDReadBuf[InHeaderSize:])
 	case OpCodeRemoveXAttr:
-		volume.doRemoveXAttr(inHeader, devFuseFDReadBuf[InHeaderSize:])
+		volume.doRemoveXAttr(devFuseFDClone, inHeader, devFuseFDReadBuf[InHeaderSize:])
 	case OpCodeFlush:
-		volume.doFlush(inHeader, devFuseFDReadBuf[InHeaderSize:])
+		volume.doFlush(devFuseFDClone, inHeader, devFuseFDReadBuf[InHeaderSize:])
 	case OpCodeInit:
-		volume.doInit(inHeader, devFuseFDReadBuf[InHeaderSize:])
+		volume.doInit(devFuseFDClone, inHeader, devFuseFDReadBuf[InHeaderSize:])
 	case OpCodeOpenDir:
-		volume.doOpenDir(inHeader, devFuseFDReadBuf[InHeaderSize:])
+		volume.doOpenDir(devFuseFDClone, inHeader, devFuseFDReadBuf[InHeaderSize:])
 	case OpCodeReadDir:
-		volume.doReadDir(inHeader, devFuseFDReadBuf[InHeaderSize:])
+		volume.doReadDir(devFuseFDClone, inHeader, devFuseFDReadBuf[InHeaderSize:])
 	case OpCodeReleaseDir:
-		volume.doReleaseDir(inHeader, devFuseFDReadBuf[InHeaderSize:])
+		volume.doReleaseDir(devFuseFDClone, inHeader, devFuseFDReadBuf[InHeaderSize:])
 	case OpCodeFSyncDir:
-		volume.doFSyncDir(inHeader, devFuseFDReadBuf[InHeaderSize:])
+		volume.doFSyncDir(devFuseFDClone, inHeader, devFuseFDReadBuf[InHeaderSize:])
 	case OpCodeGetLK:
-		volume.doGetLK(inHeader, devFuseFDReadBuf[InHeaderSize:])
+		volume.doGetLK(devFuseFDClone, inHeader, devFuseFDReadBuf[InHeaderSize:])
 	case OpCodeSetLK:
-		volume.doSetLK(inHeader, devFuseFDReadBuf[InHeaderSize:])
+		volume.doSetLK(devFuseFDClone, inHeader, devFuseFDReadBuf[InHeaderSize:])
 	case OpCodeSetLKW:
-		volume.doSetLKW(inHeader, devFuseFDReadBuf[InHeaderSize:])
+		volume.doSetLKW(devFuseFDClone, inHeader, devFuseFDReadBuf[InHeaderSize:])
 	case OpCodeAccess:
-		volume.doAccess(inHeader, devFuseFDReadBuf[InHeaderSize:])
+		volume.doAccess(devFuseFDClone, inHeader, devFuseFDReadBuf[InHeaderSize:])
 	case OpCodeCreate:
-		volume.doCreate(inHeader, devFuseFDReadBuf[InHeaderSize:])
+		volume.doCreate(devFuseFDClone, inHeader, devFuseFDReadBuf[InHeaderSize:])
 	case OpCodeInterrupt:
-		volume.doInterrupt(inHeader, devFuseFDReadBuf[InHeaderSize:])
+		volume.doInterrupt(devFuseFDClone, inHeader, devFuseFDReadBuf[InHeaderSize:])
 	case OpCodeBMap:
-		volume.doBMap(inHeader, devFuseFDReadBuf[InHeaderSize:])
+		volume.doBMap(devFuseFDClone, inHeader, devFuseFDReadBuf[InHeaderSize:])
 	case OpCodeDestroy:
-		volume.doDestroy(inHeader, devFuseFDReadBuf[InHeaderSize:])
+		volume.doDestroy(devFuseFDClone, inHeader, devFuseFDReadBuf[InHeaderSize:])
 	case OpCodeIoCtl:
-		volume.devFuseFDWriter(inHeader, syscall.EINVAL)
+		volume.devFuseFDWriter(devFuseFDClone, inHeader, syscall.EINVAL)
 	case OpCodePoll:
-		volume.doPoll(inHeader, devFuseFDReadBuf[InHeaderSize:])
+		volume.doPoll(devFuseFDClone, inHeader, devFuseFDReadBuf[InHeaderSize:])
 	case OpCodeBatchForget:
-		volume.doBatchForget(inHeader, devFuseFDReadBuf[InHeaderSize:])
+		volume.doBatchForget(devFuseFDClone, inHeader, devFuseFDReadBuf[InHeaderSize:])
 	case OpCodeFAllocate:
-		volume.doFAllocate(inHeader, devFuseFDReadBuf[InHeaderSize:])
+		volume.doFAllocate(devFuseFDClone, inHeader, devFuseFDReadBuf[InHeaderSize:])
 	case OpCodeReadDirPlus:
-		volume.doReadDirPlus(inHeader, devFuseFDReadBuf[InHeaderSize:])
+		volume.doReadDirPlus(devFuseFDClone, inHeader, devFuseFDReadBuf[InHeaderSize:])
 	case OpCodeRename2:
-		volume.doRename2(inHeader, devFuseFDReadBuf[InHeaderSize:])
+		volume.doRename2(devFuseFDClone, inHeader, devFuseFDReadBuf[InHeaderSize:])
 	case OpCodeLSeek:
-		volume.doLSeek(inHeader, devFuseFDReadBuf[InHeaderSize:])
+		volume.doLSeek(devFuseFDClone, inHeader, devFuseFDReadBuf[InHeaderSize:])
 	case OpCodeStatX:
-		volume.doStatX(inHeader, devFuseFDReadBuf[InHeaderSize:])
+		volume.doStatX(devFuseFDClone, inHeader, devFuseFDReadBuf[InHeaderSize:])
 	default:
-		volume.devFuseFDWriter(inHeader, syscall.ENOSYS)
+		volume.devFuseFDWriter(devFuseFDClone, inHeader, syscall.ENOSYS)
 	}
 
 	_, wasSubstituted = volume.devFuseFDReaderBlockedSet.LoadAndDelete(inHeader)
@@ -559,7 +598,7 @@ func (volume *volumeStruct) processDevFuseFDReadBuf(devFuseFDReadBuf []byte) (wa
 	return
 }
 
-func (volume *volumeStruct) devFuseFDWriter(inHeader *InHeader, errno syscall.Errno, bufs ...[]byte) {
+func (volume *volumeStruct) devFuseFDWriter(devFuseFDClone int, inHeader *InHeader, errno syscall.Errno, bufs ...[]byte) {
 	var (
 		buf          []byte
 		bytesWritten uintptr
@@ -601,23 +640,27 @@ func (volume *volumeStruct) devFuseFDWriter(inHeader *InHeader, errno syscall.Er
 
 	*(*uint32)(unsafe.Pointer(&outHeader[0])) = uint32(iovecSpan)
 
-	// Finally, send iovec to /dev/fuse
+	// Finally, send iovec to devLinuxFusePath
 
 RetrySyscallWriteV:
 	bytesWritten, _, errno = syscall.Syscall(
 		syscall.SYS_WRITEV,
-		uintptr(volume.devFuseFD),
+		uintptr(devFuseFDClone),
 		uintptr(unsafe.Pointer(&iovec[0])),
 		uintptr(len(iovec)))
 	if errno == 0 {
 		if bytesWritten != iovecSpan {
-			volume.logger.Printf("Write to /dev/fuse returned bad bytesWritten: %v", bytesWritten)
+			volume.logger.Printf("Write to %s returned bad bytesWritten: %v", devLinuxFusePath, bytesWritten)
 		}
 	} else {
-		if syscall.EINTR == errno {
+		if errno == syscall.EINTR {
 			goto RetrySyscallWriteV
 		}
-		volume.logger.Printf("Write to /dev/fuse returned bad errno: %v", errno)
+		if (errno == syscall.EAGAIN) || (errno == syscall.EWOULDBLOCK) {
+			runtime.Gosched()
+			goto RetrySyscallWriteV
+		}
+		volume.logger.Printf("Write to %s returned bad errno: %v", devLinuxFusePath, errno)
 	}
 }
 

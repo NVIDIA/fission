@@ -153,6 +153,13 @@ func NewVolume(volumeConfig *VolumeConfig) (volume Volume) {
 //  6.15     7.43
 //  6.16     7.44
 
+const (
+	// FuseDevIocClone is the ioctl to clone a FUSE device FD.
+	// Derived from _IOR(229, 0, uint32_t)
+	// 229 is the FUSE device "magic" (0xE5)
+	FuseDevIocClone = 0x8004e500
+)
+
 const AttrSize = 88
 
 type Attr struct {
