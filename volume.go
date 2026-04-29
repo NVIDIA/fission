@@ -451,9 +451,9 @@ func (volume *volumeStruct) devFuseFDReader() {
 				})
 			}
 
-			// In any ev event, it is time to exit
+			// In any event, it is time to exit
 
-			_ = syscall.Close(devFuseFDClone)
+			_ = devFuseFDCloneWrapped.Close()
 
 			volume.devFuseFDReaderWG.Done()
 
@@ -468,7 +468,7 @@ func (volume *volumeStruct) devFuseFDReader() {
 		if wasSubstituted {
 			// Time to exit...
 
-			_ = syscall.Close(devFuseFDClone)
+			_ = devFuseFDCloneWrapped.Close()
 
 			volume.devFuseFDReaderWG.Done()
 
