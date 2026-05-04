@@ -104,6 +104,7 @@ type VolumeConfig struct {
 	DefaultPermissions bool        //
 	AllowOther         bool        // Non-root users may want to specify this as TRUE to enable other non-root users access to the mount point
 	NumWorkers         int         // Number of low-latency workers to poll /dev/fuse; If == 0, defaults to runtime.NumCPU()
+	PerWorkerFD        bool        // If true, each worker will get a unique cloned /dev/fuse file descriptor
 	Callbacks          Callbacks   // Various callbacks listed in the Callbacks interface will be made while the Volume is mounted
 	Logger             *log.Logger //
 	ErrChan            chan error  // Enables the Volume to indicate that it is no longer servicing FUSE upcalls (e.g. as a result of an intentional DoUnmount() call or some unexpected error reading from /dev/fuse)
