@@ -30,6 +30,7 @@ type volumeStruct struct {
 	defaultPermissions        bool
 	allowOther                bool
 	numWorkers                int
+	perWorkerFD               bool
 	callbacks                 Callbacks
 	logger                    *log.Logger
 	errChan                   chan error
@@ -75,12 +76,14 @@ func newVolume(volumeConfig *VolumeConfig) (volume *volumeStruct) {
 		maxWrite:           volumeConfig.MaxWrite,
 		defaultPermissions: volumeConfig.DefaultPermissions,
 		allowOther:         volumeConfig.AllowOther,
-		callbacks:          volumeConfig.Callbacks,
-		logger:             volumeConfig.Logger,
-		errChan:            volumeConfig.ErrChan,
-		devFuseFDReadSize:  devFuseFDReadSize,
-		fuseMajor:          0,
-		fuseMinor:          0,
+		// numWorkers filled in below
+		perWorkerFD:       volumeConfig.PerWorkerFD,
+		callbacks:         volumeConfig.Callbacks,
+		logger:            volumeConfig.Logger,
+		errChan:           volumeConfig.ErrChan,
+		devFuseFDReadSize: devFuseFDReadSize,
+		fuseMajor:         0,
+		fuseMinor:         0,
 	}
 
 	if volumeConfig.NumWorkers == 0 {
@@ -326,7 +329,7 @@ func (volume *volumeStruct) DoUnmount() (err error) {
 
 	volume.devFuseFDReaderWG.Wait()
 
-	err = syscall.Close(volume.devFuseFD)
+	err = volume.devFuseFile.Close()
 	if err != nil {
 		volume.logger.Printf("DoUnmount() unable to close %s: %v", devLinuxFusePath, err)
 		return
@@ -395,47 +398,52 @@ func (volume *volumeStruct) devFuseFDReader() {
 		wasSubstituted        bool
 	)
 
-	devFuseFDClone, err = unix.Open(devLinuxFusePath, unix.O_RDWR, 0)
-	if err != nil {
-		volume.errChanOnce.Do(func() {
-			volume.logger.Printf("Exiting due to %s Open err: %v", devLinuxFusePath, err)
-			volume.errChan <- err
-		})
+	if volume.perWorkerFD {
+		devFuseFDClone, err = unix.Open(devLinuxFusePath, unix.O_RDWR, 0)
+		if err != nil {
+			volume.errChanOnce.Do(func() {
+				volume.logger.Printf("Exiting due to %s Open err: %v", devLinuxFusePath, err)
+				volume.errChan <- err
+			})
 
-		volume.devFuseFDReaderWG.Done()
+			volume.devFuseFDReaderWG.Done()
 
-		return
+			return
+		}
+
+		err = unix.IoctlSetPointerInt(devFuseFDClone, FuseDevIocClone, volume.devFuseFD)
+		if err != nil {
+			volume.errChanOnce.Do(func() {
+				volume.logger.Printf("Exiting due to %s IoctlSetInt err: %v", devLinuxFusePath, err)
+				volume.errChan <- err
+			})
+
+			_ = syscall.Close(devFuseFDClone)
+
+			volume.devFuseFDReaderWG.Done()
+
+			return
+		}
+
+		err = unix.SetNonblock(devFuseFDClone, true)
+		if err != nil {
+			volume.errChanOnce.Do(func() {
+				volume.logger.Printf("Exiting due to %s SetNonblock err: %v", devLinuxFusePath, err)
+				volume.errChan <- err
+			})
+
+			_ = syscall.Close(devFuseFDClone)
+
+			volume.devFuseFDReaderWG.Done()
+
+			return
+		}
+
+		devFuseFDCloneWrapped = os.NewFile(uintptr(devFuseFDClone), "devFuseFDReader")
+	} else {
+		devFuseFDClone = volume.devFuseFD
+		devFuseFDCloneWrapped = volume.devFuseFile
 	}
-
-	err = unix.IoctlSetPointerInt(devFuseFDClone, FuseDevIocClone, volume.devFuseFD)
-	if err != nil {
-		volume.errChanOnce.Do(func() {
-			volume.logger.Printf("Exiting due to %s IoctlSetInt err: %v", devLinuxFusePath, err)
-			volume.errChan <- err
-		})
-
-		_ = syscall.Close(devFuseFDClone)
-
-		volume.devFuseFDReaderWG.Done()
-
-		return
-	}
-
-	err = unix.SetNonblock(devFuseFDClone, true)
-	if err != nil {
-		volume.errChanOnce.Do(func() {
-			volume.logger.Printf("Exiting due to %s SetNonblock err: %v", devLinuxFusePath, err)
-			volume.errChan <- err
-		})
-
-		_ = syscall.Close(devFuseFDClone)
-
-		volume.devFuseFDReaderWG.Done()
-
-		return
-	}
-
-	devFuseFDCloneWrapped = os.NewFile(uintptr(devFuseFDClone), "devFuseFDReader")
 
 	for {
 		devFuseFDReadBuf = devFuseFDReadBuf[:volume.devFuseFDReadSize] // len == cap
@@ -453,7 +461,9 @@ func (volume *volumeStruct) devFuseFDReader() {
 
 			// In any event, it is time to exit
 
-			_ = devFuseFDCloneWrapped.Close()
+			if volume.perWorkerFD {
+				_ = devFuseFDCloneWrapped.Close()
+			}
 
 			volume.devFuseFDReaderWG.Done()
 
@@ -468,7 +478,9 @@ func (volume *volumeStruct) devFuseFDReader() {
 		if wasSubstituted {
 			// Time to exit...
 
-			_ = devFuseFDCloneWrapped.Close()
+			if volume.perWorkerFD {
+				_ = devFuseFDCloneWrapped.Close()
+			}
 
 			volume.devFuseFDReaderWG.Done()
 

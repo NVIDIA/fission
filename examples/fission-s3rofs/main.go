@@ -454,6 +454,7 @@ func main() {
 		DefaultPermissions: false,
 		AllowOther:         false,
 		NumWorkers:         0,
+		PerWorkerFD:        false,
 		Callbacks:          &globals,
 		Logger:             globals.logger,
 		ErrChan:            globals.errChan,
