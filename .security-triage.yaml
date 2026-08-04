@@ -1,0 +1,20 @@
+version: "1.0"
+project: "fission"
+last_updated: "2026-08-03T18:47:00Z"
+
+repository_exposure_classification:
+  visibility: "Public"
+  basis: "The origin repository is the publicly accessible NVIDIA/fission GitHub repository."
+  confirmed_by: "emcclanahan"
+  date: "2026-08-03"
+
+service_exposure_classification:
+  tier: "External / Regulated"
+  confidence: "high"
+  basis: "Externally distributed open-source Go FUSE library (NVIDIA/fission); privileged /dev/fuse mount path when used, with example filesystems that may contact remote object stores."
+  confirmed_by: "emcclanahan"
+  date: "2026-08-03"
+
+false_positives: []
+accepted_risks: []
+suppressed_cves: []
